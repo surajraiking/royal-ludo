@@ -5,7 +5,10 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.model.*
+import com.example.repository.LudoFirebaseRepository
 import com.example.repository.UserPreferences
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.example.ui.theme.LudoRed
 import com.example.ui.theme.LudoGreen
 import com.example.ui.theme.LudoYellow
@@ -16,11 +19,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class LudoViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = UserPreferences(application)
+    val firebaseRepo = LudoFirebaseRepository(application)
+
+    // Cloud status & Leaderboard
+    var isCloudSyncing by mutableStateOf(false)
+        private set
+    private val _leaderboardUsers = MutableStateFlow<List<FirebaseUserProfile>>(emptyList())
+    val leaderboardUsers: StateFlow<List<FirebaseUserProfile>> = _leaderboardUsers.asStateFlow()
 
     // User Currency & Customizations
     var userCoins by mutableStateOf(prefs.coins)
@@ -76,11 +87,66 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         resetGameBoard()
     }
 
+    fun onUserAuthenticated() {
+        if (Firebase.auth.currentUser == null) return
+        isCloudSyncing = true
+        viewModelScope.launch {
+            try {
+                firebaseRepo.saveOrInitUserProfile(
+                    username = prefs.username,
+                    avatarId = prefs.avatarId,
+                    initialCoins = prefs.coins,
+                    initialGems = prefs.gems
+                )
+            } catch (e: Exception) {
+                // Handled in repo
+            }
+
+            launch {
+                firebaseRepo.observeUserProfile()
+                    .catch { }
+                    .collect { profile ->
+                        if (profile != null) {
+                            username = profile.username
+                            avatarId = profile.avatarId
+                            userCoins = profile.coins
+                            userGems = profile.gems
+                            matchesPlayed = profile.matchesPlayed
+                            matchesWon = profile.matchesWon
+
+                            prefs.username = profile.username
+                            prefs.avatarId = profile.avatarId
+                            prefs.coins = profile.coins
+                            prefs.gems = profile.gems
+                            prefs.matchesPlayed = profile.matchesPlayed
+                            prefs.matchesWon = profile.matchesWon
+                        }
+                        isCloudSyncing = false
+                    }
+            }
+
+            launch {
+                firebaseRepo.observeLeaderboard()
+                    .catch { }
+                    .collect { users ->
+                        _leaderboardUsers.value = users
+                    }
+            }
+        }
+    }
+
     fun updateProfile(name: String, avId: String) {
         prefs.username = name
         prefs.avatarId = avId
         username = name
         avatarId = avId
+        viewModelScope.launch {
+            try {
+                if (Firebase.auth.currentUser != null) {
+                    firebaseRepo.updateProfile(name, avId)
+                }
+            } catch (e: Exception) { }
+        }
     }
 
     fun rollDailyReward(): Int {
@@ -88,6 +154,13 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         prefs.earnCoins(earned)
         userCoins = prefs.coins
         prefs.lastSpinTimestamp = System.currentTimeMillis()
+        viewModelScope.launch {
+            try {
+                if (Firebase.auth.currentUser != null) {
+                    firebaseRepo.updateCurrency(coinsDelta = earned, gemsDelta = 0)
+                }
+            } catch (e: Exception) { }
+        }
         return earned
     }
 
@@ -96,6 +169,13 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         prefs.earnGems(earned)
         userGems = prefs.gems
         prefs.lastSpinTimestamp = System.currentTimeMillis()
+        viewModelScope.launch {
+            try {
+                if (Firebase.auth.currentUser != null) {
+                    firebaseRepo.updateCurrency(coinsDelta = 0, gemsDelta = earned)
+                }
+            } catch (e: Exception) { }
+        }
         return earned
     }
 
@@ -112,6 +192,13 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
             userGems = prefs.gems
             unlockedSkins = prefs.unlockedSkins
             selectSkin(skin)
+            viewModelScope.launch {
+                try {
+                    if (Firebase.auth.currentUser != null) {
+                        firebaseRepo.updateCurrency(coinsDelta = -goldCost, gemsDelta = -gemsCost)
+                    }
+                } catch (e: Exception) { }
+            }
         }
         return success
     }
@@ -419,6 +506,18 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         userGems = prefs.gems
         matchesPlayed = prefs.matchesPlayed
         matchesWon = prefs.matchesWon
+
+        viewModelScope.launch {
+            try {
+                if (Firebase.auth.currentUser != null) {
+                    firebaseRepo.recordMatch(
+                        gameMode = lobbyMode.name,
+                        won = userWon,
+                        coinsEarned = if (userWon) 250 else 50
+                    )
+                }
+            } catch (e: Exception) { }
+        }
 
         if (userWon) {
             sendChatMessage("Royal Palace", "🏆 Congratulations $username! You are the Empire Sovereign!")

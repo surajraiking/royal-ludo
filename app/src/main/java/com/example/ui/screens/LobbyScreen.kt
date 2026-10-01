@@ -27,6 +27,9 @@ import androidx.compose.ui.window.Dialog
 import com.example.model.PlayerType
 import com.example.ui.theme.*
 import com.example.viewmodel.LudoViewModel
+import androidx.credentials.CredentialManager
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +40,9 @@ fun LobbyScreen(
     onNavigateToLeaderboard: () -> Unit,
     onNavigateToStore: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showApkGuideDialog by remember { mutableStateOf(false) }
     var tempName by remember { mutableStateOf(viewModel.username) }
@@ -822,7 +828,55 @@ fun LobbyScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Google Account Cloud Info
+                        val googleUser = Firebase.auth.currentUser
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(GlassCardBorder)
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("☁️", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Cloud Account Synced",
+                                        color = NeonCyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = googleUser?.email ?: "Google Account",
+                                        color = TextWhite.copy(alpha = 0.8f),
+                                        fontSize = 10.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        signOutGoogle(
+                                            context = context,
+                                            credentialManager = credentialManager,
+                                            onSignOutComplete = {
+                                                showEditProfileDialog = false
+                                            },
+                                            scope = coroutineScope
+                                        )
+                                    }
+                                ) {
+                                    Text("Sign Out", color = LudoRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),

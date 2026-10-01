@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -14,6 +15,9 @@ import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.LudoViewModel
+import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.auth
 
 class MainActivity : ComponentActivity() {
     private val ludoViewModel: LudoViewModel by viewModels()
@@ -24,59 +28,83 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    // Set up modern Compose Navigation Controller
-                    val navController = rememberNavController()
-                    
-                    NavHost(
-                        navController = navController,
-                        startDestination = "splash"
-                    ) {
-                        composable("splash") {
-                            SplashScreen(
-                                onNavigateToLobby = {
-                                    navController.navigate("lobby") {
-                                        popUpTo("splash") { inclusive = true }
+                    var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+
+                    DisposableEffect(Unit) {
+                        val listener = FirebaseAuth.AuthStateListener { auth ->
+                            currentUser = auth.currentUser
+                            if (auth.currentUser != null) {
+                                ludoViewModel.onUserAuthenticated()
+                            }
+                        }
+                        Firebase.auth.addAuthStateListener(listener)
+                        onDispose {
+                            Firebase.auth.removeAuthStateListener(listener)
+                        }
+                    }
+
+                    if (currentUser == null) {
+                        AuthScreen(
+                            onAuthSuccess = {
+                                currentUser = Firebase.auth.currentUser
+                                ludoViewModel.onUserAuthenticated()
+                            }
+                        )
+                    } else {
+                        // Set up modern Compose Navigation Controller
+                        val navController = rememberNavController()
+
+                        NavHost(
+                            navController = navController,
+                            startDestination = "splash"
+                        ) {
+                            composable("splash") {
+                                SplashScreen(
+                                    onNavigateToLobby = {
+                                        navController.navigate("lobby") {
+                                            popUpTo("splash") { inclusive = true }
+                                        }
                                     }
-                                }
-                            )
-                        }
-                        
-                        composable("lobby") {
-                            LobbyScreen(
-                                viewModel = ludoViewModel,
-                                onNavigateToGame = { navController.navigate("game") },
-                                onNavigateToSpin = { navController.navigate("spin_wheel") },
-                                onNavigateToLeaderboard = { navController.navigate("leaderboard") },
-                                onNavigateToStore = { navController.navigate("store") }
-                            )
-                        }
-                        
-                        composable("game") {
-                            GameScreen(
-                                viewModel = ludoViewModel,
-                                onNavigateBack = { navController.popBackStack() }
-                            )
-                        }
-                        
-                        composable("spin_wheel") {
-                            SpinWheelScreen(
-                                viewModel = ludoViewModel,
-                                onNavigateBack = { navController.popBackStack() }
-                            )
-                        }
-                        
-                        composable("leaderboard") {
-                            LeaderboardScreen(
-                                viewModel = ludoViewModel,
-                                onNavigateBack = { navController.popBackStack() }
-                            )
-                        }
-                        
-                        composable("store") {
-                            StoreScreen(
-                                viewModel = ludoViewModel,
-                                onNavigateBack = { navController.popBackStack() }
-                            )
+                                )
+                            }
+
+                            composable("lobby") {
+                                LobbyScreen(
+                                    viewModel = ludoViewModel,
+                                    onNavigateToGame = { navController.navigate("game") },
+                                    onNavigateToSpin = { navController.navigate("spin_wheel") },
+                                    onNavigateToLeaderboard = { navController.navigate("leaderboard") },
+                                    onNavigateToStore = { navController.navigate("store") }
+                                )
+                            }
+
+                            composable("game") {
+                                GameScreen(
+                                    viewModel = ludoViewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
+
+                            composable("spin_wheel") {
+                                SpinWheelScreen(
+                                    viewModel = ludoViewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
+
+                            composable("leaderboard") {
+                                LeaderboardScreen(
+                                    viewModel = ludoViewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
+
+                            composable("store") {
+                                StoreScreen(
+                                    viewModel = ludoViewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
                         }
                     }
                 }

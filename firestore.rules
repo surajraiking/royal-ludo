@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // --- 1. User Profile Validation ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.username is string && data.username.size() >= 2 && data.username.size() <= 30 &&
+             data.avatarId is string && data.avatarId.size() >= 2 && data.avatarId.size() <= 30 &&
+             data.coins is int && data.coins >= 0 &&
+             data.gems is int && data.gems >= 0 &&
+             data.matchesPlayed is int && data.matchesPlayed >= 0 &&
+             data.matchesWon is int && data.matchesWon >= 0 &&
+             (!('unlockedDiceSkins' in data) || data.unlockedDiceSkins is list) &&
+             (!('unlockedThemes' in data) || data.unlockedThemes is list) &&
+             (!('selectedDiceSkin' in data) || data.selectedDiceSkin is string) &&
+             (!('selectedTheme' in data) || data.selectedTheme is string) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- 2. Match Record Validation ---
+    function isValidMatchRecord(data, userId) {
+      return data.matchId is string && data.matchId.size() > 0 &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.gameMode is string && data.gameMode.size() > 0 &&
+             data.won is bool &&
+             data.coinsEarned is int &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // --- 3. Game Room Validation ---
+    function isValidGameRoom(data) {
+      return data.roomId is string && data.roomId.size() >= 4 && data.roomId.size() <= 12 &&
+             data.hostId is string && data.hostId.size() > 0 &&
+             data.hostName is string && data.hostName.size() >= 2 && data.hostName.size() <= 30 &&
+             data.stake is int && data.stake >= 0 &&
+             data.theme is string && data.theme.size() > 0 &&
+             data.status in ['waiting', 'playing', 'finished'] &&
+             data.playerCount is int && data.playerCount >= 1 && data.playerCount <= 4 &&
+             data.playerIds is list && data.playerIds.size() >= 1 && data.playerIds.size() <= 4 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- Collections ---
+
+    // Users Collection
+    match /users/{userId} {
+      // Any authenticated user can read public profiles for leaderboard / matches
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow delete: if false;
+
+      // Match History subcollection
+      match /matches/{matchId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidMatchRecord(request.resource.data, userId);
+        allow update, delete: if false;
+      }
+    }
+
+    // Rooms Collection (Friend Multiplayer & Matchmaking)
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                       request.auth.uid == request.resource.data.hostId &&
+                       request.resource.data.playerIds[0] == request.auth.uid &&
+                       isValidGameRoom(request.resource.data);
+      allow update: if isAuthenticated() &&
+                       (request.auth.uid in resource.data.playerIds || request.auth.uid in request.resource.data.playerIds) &&
+                       isValidGameRoom(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.hostId == request.auth.uid;
+    }
+  }
+}

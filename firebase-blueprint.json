@@ -1,0 +1,192 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with game stats, currency, and unlocked cosmetics",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique Google user ID"
+        },
+        "username": {
+          "type": "string",
+          "description": "Warrior display name"
+        },
+        "avatarId": {
+          "type": "string",
+          "description": "Selected avatar identifier"
+        },
+        "coins": {
+          "type": "integer",
+          "description": "Player gold coins"
+        },
+        "gems": {
+          "type": "integer",
+          "description": "Player gems"
+        },
+        "matchesPlayed": {
+          "type": "integer",
+          "description": "Total matches played"
+        },
+        "matchesWon": {
+          "type": "integer",
+          "description": "Total matches won"
+        },
+        "unlockedDiceSkins": {
+          "type": "array",
+          "description": "List of unlocked dice skin IDs"
+        },
+        "unlockedThemes": {
+          "type": "array",
+          "description": "List of unlocked board theme IDs"
+        },
+        "selectedDiceSkin": {
+          "type": "string",
+          "description": "Currently equipped dice skin"
+        },
+        "selectedTheme": {
+          "type": "string",
+          "description": "Currently equipped board theme"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last profile update timestamp"
+        }
+      },
+      "required": [
+        "userId",
+        "username",
+        "avatarId",
+        "coins",
+        "gems",
+        "matchesPlayed",
+        "matchesWon",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MatchRecord": {
+      "title": "MatchRecord",
+      "description": "Record of a completed Ludo match",
+      "type": "object",
+      "properties": {
+        "matchId": {
+          "type": "string",
+          "description": "Unique match ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Player ID"
+        },
+        "gameMode": {
+          "type": "string",
+          "description": "Mode played (AI, Online, Friends, Offline)"
+        },
+        "won": {
+          "type": "boolean",
+          "description": "Whether player won this match"
+        },
+        "coinsEarned": {
+          "type": "integer",
+          "description": "Coins gained or lost"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Match completion timestamp"
+        }
+      },
+      "required": [
+        "matchId",
+        "userId",
+        "gameMode",
+        "won",
+        "coinsEarned",
+        "createdAt"
+      ]
+    },
+    "GameRoom": {
+      "title": "GameRoom",
+      "description": "Private room for multiplayer friend lobbies",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "description": "6-character room code"
+        },
+        "hostId": {
+          "type": "string",
+          "description": "Host player user ID"
+        },
+        "hostName": {
+          "type": "string",
+          "description": "Host player username"
+        },
+        "stake": {
+          "type": "integer",
+          "description": "Coins bet amount"
+        },
+        "theme": {
+          "type": "string",
+          "description": "Selected board theme"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "playing", "finished"],
+          "description": "Current room state"
+        },
+        "playerCount": {
+          "type": "integer",
+          "description": "Number of players joined"
+        },
+        "playerIds": {
+          "type": "array",
+          "description": "Array of participant user IDs"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Room creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": [
+        "roomId",
+        "hostId",
+        "hostName",
+        "stake",
+        "theme",
+        "status",
+        "playerCount",
+        "playerIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document containing stats and settings"
+    },
+    "/users/{userId}/matches/{matchId}": {
+      "schema": "MatchRecord",
+      "description": "User match history records"
+    },
+    "/rooms/{roomId}": {
+      "schema": "GameRoom",
+      "description": "Online multiplayer private rooms"
+    }
+  }
+}

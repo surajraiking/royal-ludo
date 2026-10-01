@@ -9,10 +9,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,17 +41,39 @@ fun LeaderboardScreen(
     viewModel: LudoViewModel,
     onNavigateBack: () -> Unit
 ) {
-    // Simulated world list including the user
-    val leaders = listOf(
-        LeaderboardEntry("GoldLudoLord", 125, "74%", 42000, "👑"),
-        LeaderboardEntry("NeonQueen_99", 108, "68%", 31500, "🦁"),
-        LeaderboardEntry("SlayerSovereign", 92, "62%", 24000, "🐉"),
-        LeaderboardEntry("${viewModel.username} (You)", viewModel.matchesWon, if (viewModel.matchesPlayed == 0) "0%" else "${(viewModel.matchesWon * 100) / viewModel.matchesPlayed}%", viewModel.userCoins, "👑", isUser = true),
-        LeaderboardEntry("CyberWarrior", 54, "58%", 15400, "🏎️"),
-        LeaderboardEntry("ShadowFighter", 48, "55%", 12000, "🐉"),
-        LeaderboardEntry("LudoUnicorn", 39, "51%", 9800, "🦄"),
-        LeaderboardEntry("StarSeeker", 22, "45%", 4500, "👽")
-    ).sortedByDescending { it.wins }
+    val firestoreUsers by viewModel.leaderboardUsers.collectAsState()
+
+    val leaders = if (firestoreUsers.isNotEmpty()) {
+        firestoreUsers.map { user ->
+            LeaderboardEntry(
+                name = if (user.userId == viewModel.firebaseRepo.currentUserId) "${user.username} (You)" else user.username,
+                wins = user.matchesWon,
+                rate = if (user.matchesPlayed == 0) "0%" else "${(user.matchesWon * 100) / user.matchesPlayed}%",
+                coins = user.coins,
+                avatar = when (user.avatarId) {
+                    "avatar_crown" -> "👑"
+                    "avatar_lion" -> "🦁"
+                    "avatar_car" -> "🏎️"
+                    "avatar_dragon" -> "🐉"
+                    "avatar_unicorn" -> "🦄"
+                    "avatar_alien" -> "👽"
+                    else -> "👑"
+                },
+                isUser = user.userId == viewModel.firebaseRepo.currentUserId
+            )
+        }.sortedByDescending { it.coins }
+    } else {
+        listOf(
+            LeaderboardEntry("GoldLudoLord", 125, "74%", 42000, "👑"),
+            LeaderboardEntry("NeonQueen_99", 108, "68%", 31500, "🦁"),
+            LeaderboardEntry("SlayerSovereign", 92, "62%", 24000, "🐉"),
+            LeaderboardEntry("${viewModel.username} (You)", viewModel.matchesWon, if (viewModel.matchesPlayed == 0) "0%" else "${(viewModel.matchesWon * 100) / viewModel.matchesPlayed}%", viewModel.userCoins, "👑", isUser = true),
+            LeaderboardEntry("CyberWarrior", 54, "58%", 15400, "🏎️"),
+            LeaderboardEntry("ShadowFighter", 48, "55%", 12000, "🐉"),
+            LeaderboardEntry("LudoUnicorn", 39, "51%", 9800, "🦄"),
+            LeaderboardEntry("StarSeeker", 22, "45%", 4500, "👽")
+        ).sortedByDescending { it.wins }
+    }
 
     Scaffold(
         topBar = {
@@ -57,7 +81,7 @@ fun LeaderboardScreen(
                 title = { Text("IMPERIAL GLOBAL SCORES", color = GoldPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = GoldPrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GoldPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepDarkBg)
