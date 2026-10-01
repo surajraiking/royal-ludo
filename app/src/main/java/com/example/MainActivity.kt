@@ -29,11 +29,13 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+                    var isGuestOrCustomLoggedIn by remember { mutableStateOf(false) }
 
                     DisposableEffect(Unit) {
                         val listener = FirebaseAuth.AuthStateListener { auth ->
                             currentUser = auth.currentUser
                             if (auth.currentUser != null) {
+                                isGuestOrCustomLoggedIn = true
                                 ludoViewModel.onUserAuthenticated()
                             }
                         }
@@ -43,11 +45,16 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    if (currentUser == null) {
+                    if (currentUser == null && !isGuestOrCustomLoggedIn) {
                         AuthScreen(
                             onAuthSuccess = {
                                 currentUser = Firebase.auth.currentUser
+                                isGuestOrCustomLoggedIn = true
                                 ludoViewModel.onUserAuthenticated()
+                            },
+                            onGuestOrCustomLogin = { username, avatarId ->
+                                ludoViewModel.updateProfile(username, avatarId)
+                                isGuestOrCustomLoggedIn = true
                             }
                         )
                     } else {

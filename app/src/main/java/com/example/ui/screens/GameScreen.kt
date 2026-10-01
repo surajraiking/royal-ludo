@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -9,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,7 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.*
-import com.example.ui.components.LudoBoardComponent
+import com.example.ui.components.LudoBoardGridComponent
 import com.example.ui.theme.*
 import com.example.viewmodel.LudoViewModel
 import kotlinx.coroutines.delay
@@ -45,6 +47,13 @@ fun GameScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var messageText by remember { mutableStateOf("") }
+    var showBoardStatsDialog by remember { mutableStateOf(false) }
+    var showExitConfirmDialog by remember { mutableStateOf(false) }
+
+    // Intercept hardware and gesture back button to ask confirmation
+    BackHandler {
+        showExitConfirmDialog = true
+    }
     
     // Dice rotation animation state
     val diceRotation = remember { Animatable(0f) }
@@ -133,14 +142,13 @@ fun GameScreen(
             ) {
                 IconButton(
                     onClick = {
-                        viewModel.exitGame()
-                        onNavigateBack()
+                        showExitConfirmDialog = true
                     },
                     modifier = Modifier
                         .clip(CircleShape)
                         .background(GlassCard)
                 ) {
-                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Exit", tint = GoldPrimary)
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Exit", tint = GoldPrimary)
                 }
 
                 // Voice Stream Fluctuating Indicator
@@ -195,172 +203,226 @@ fun GameScreen(
                 ) {
                     Text(text = "👑 ${viewModel.selectedDiceSkin}", color = GoldPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
+
+                // Board Tracker & Stats Dialog Trigger
+                IconButton(
+                    onClick = { showBoardStatsDialog = true },
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(GlassCard)
+                        .border(1.dp, GlassCardBorder, CircleShape)
+                ) {
+                    Text("📊", fontSize = 14.sp)
+                }
             }
 
-            // 2. PLAYER AVATARS ROW - GREEN AND YELLOW (TOP OPPONENTS)
+            // 2. PLAYER AVATARS ROW - GREEN AND YELLOW (TOP OPPONENTS WITH PLAYER SECTION 3D DICE)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Player GREEN (Turn Index 1)
                 val greenPlayer = viewModel.players.getOrNull(1)
                 if (greenPlayer != null) {
+                    val isGreenTurn = viewModel.currentTurnColor == PlayerColor.GREEN
                     PlayerWidget(
                         player = greenPlayer,
-                        isActiveTurn = viewModel.currentTurnColor == PlayerColor.GREEN,
+                        isActiveTurn = isGreenTurn,
                         color = PlayerColor.GREEN,
-                        score = viewModel.tokens.filter { it.color == PlayerColor.GREEN && it.state == TokenState.GOAL }.size
+                        score = viewModel.tokens.count { it.color == PlayerColor.GREEN && it.state == TokenState.GOAL },
+                        position = viewModel.getPlayerBoardPosition(PlayerColor.GREEN),
+                        diceValue = if (isGreenTurn) viewModel.diceValue else 1,
+                        isRolling = isGreenTurn && viewModel.rollingAnimActive,
+                        hasRolled = isGreenTurn && viewModel.hasRolled,
+                        isHuman = greenPlayer.type == PlayerType.LOCAL_HUMAN,
+                        onRollDice = { if (isGreenTurn) viewModel.rollDice() },
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
                 // Player YELLOW (Turn Index 2)
                 val yellowPlayer = viewModel.players.getOrNull(2)
                 if (yellowPlayer != null) {
+                    val isYellowTurn = viewModel.currentTurnColor == PlayerColor.YELLOW
                     PlayerWidget(
                         player = yellowPlayer,
-                        isActiveTurn = viewModel.currentTurnColor == PlayerColor.YELLOW,
+                        isActiveTurn = isYellowTurn,
                         color = PlayerColor.YELLOW,
-                        score = viewModel.tokens.filter { it.color == PlayerColor.YELLOW && it.state == TokenState.GOAL }.size
+                        score = viewModel.tokens.count { it.color == PlayerColor.YELLOW && it.state == TokenState.GOAL },
+                        position = viewModel.getPlayerBoardPosition(PlayerColor.YELLOW),
+                        diceValue = if (isYellowTurn) viewModel.diceValue else 1,
+                        isRolling = isYellowTurn && viewModel.rollingAnimActive,
+                        hasRolled = isYellowTurn && viewModel.hasRolled,
+                        isHuman = yellowPlayer.type == PlayerType.LOCAL_HUMAN,
+                        onRollDice = { if (isYellowTurn) viewModel.rollDice() },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            // Real-Time Turn & Phase HUD Banner
+            val turnInfo = viewModel.gameTurnInfo
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(GlassCard)
+                    .border(1.dp, GlassCardBorder, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Round ${turnInfo.roundNumber} • Turn ${turnInfo.turnNumber}",
+                        color = TextWhite,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "(${turnInfo.activePlayerName})",
+                        color = turnInfo.activeColor.color,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
 
-            // 3. MAIN CENTER LUDO BOARD COMPONENT
-            LudoBoardComponent(
+                val phaseBadgeColor = when (turnInfo.phase) {
+                    TurnPhase.ROLL_DICE -> GoldPrimary
+                    TurnPhase.SELECT_PIECE -> NeonCyan
+                    TurnPhase.PIECE_MOVING -> LudoYellow
+                    TurnPhase.EXTRA_TURN -> LudoGreen
+                    TurnPhase.NO_MOVES -> LudoRed
+                    TurnPhase.GAME_OVER -> GoldPrimary
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(phaseBadgeColor.copy(alpha = 0.2f))
+                        .border(1.dp, phaseBadgeColor, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = turnInfo.bonusReason ?: turnInfo.phase.title,
+                        color = phaseBadgeColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 3. MAIN CENTER 3D LUDO BOARD COMPONENT (3D CHESS PIECES & 3D AREA TEXT)
+            LudoBoardGridComponent(
                 tokens = viewModel.tokens,
                 movableTokenIds = viewModel.movableTokenIds,
                 currentTurnColor = viewModel.currentTurnColor,
                 onTokenClicked = { tok -> viewModel.moveToken(tok) },
+                movingTokenId = viewModel.movingTokenId,
+                center3DText = viewModel.center3DTextHeadline,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // 4. PLAYER AVATARS ROW - RED AND BLUE (BOTTOM PLAYERS)
+            // 4. PLAYER AVATARS ROW - RED AND BLUE (BOTTOM PLAYERS WITH PLAYER SECTION 3D DICE)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Player RED (You) (Turn Index 0)
                 val redPlayer = viewModel.players.getOrNull(0)
                 if (redPlayer != null) {
+                    val isRedTurn = viewModel.currentTurnColor == PlayerColor.RED
                     PlayerWidget(
                         player = redPlayer,
-                        isActiveTurn = viewModel.currentTurnColor == PlayerColor.RED,
+                        isActiveTurn = isRedTurn,
                         color = PlayerColor.RED,
-                        score = viewModel.tokens.filter { it.color == PlayerColor.RED && it.state == TokenState.GOAL }.size
+                        score = viewModel.tokens.count { it.color == PlayerColor.RED && it.state == TokenState.GOAL },
+                        position = viewModel.getPlayerBoardPosition(PlayerColor.RED),
+                        diceValue = if (isRedTurn) viewModel.diceValue else 1,
+                        isRolling = isRedTurn && viewModel.rollingAnimActive,
+                        hasRolled = isRedTurn && viewModel.hasRolled,
+                        isHuman = redPlayer.type == PlayerType.LOCAL_HUMAN,
+                        onRollDice = { if (isRedTurn) viewModel.rollDice() },
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
                 // Player BLUE (Turn Index 3)
                 val bluePlayer = viewModel.players.getOrNull(3)
                 if (bluePlayer != null) {
+                    val isBlueTurn = viewModel.currentTurnColor == PlayerColor.BLUE
                     PlayerWidget(
                         player = bluePlayer,
-                        isActiveTurn = viewModel.currentTurnColor == PlayerColor.BLUE,
+                        isActiveTurn = isBlueTurn,
                         color = PlayerColor.BLUE,
-                        score = viewModel.tokens.filter { it.color == PlayerColor.BLUE && it.state == TokenState.GOAL }.size
+                        score = viewModel.tokens.count { it.color == PlayerColor.BLUE && it.state == TokenState.GOAL },
+                        position = viewModel.getPlayerBoardPosition(PlayerColor.BLUE),
+                        diceValue = if (isBlueTurn) viewModel.diceValue else 1,
+                        isRolling = isBlueTurn && viewModel.rollingAnimActive,
+                        hasRolled = isBlueTurn && viewModel.hasRolled,
+                        isHuman = bluePlayer.type == PlayerType.LOCAL_HUMAN,
+                        onRollDice = { if (isBlueTurn) viewModel.rollDice() },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // 5. INTERACTIVE DICE ROLLER & HINT STATUS
+            // 5. INTERACTIVE 3D TURN GUIDANCE & TACTICAL STATUS
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(GlassCard)
-                    .border(1.dp, GlassCardBorder, RoundedCornerShape(16.dp))
-                    .padding(10.dp),
+                    .border(1.dp, GlassCardBorder, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Hint display
+                val activePlayer = viewModel.getActivePlayer()
+                val isUserTurn = viewModel.currentTurnColor == PlayerColor.RED && activePlayer?.type == PlayerType.LOCAL_HUMAN
+
                 Column(modifier = Modifier.weight(1f)) {
-                    val activePlayer = viewModel.getActivePlayer()
-                    val isUserTurn = viewModel.currentTurnColor == PlayerColor.RED && activePlayer?.type == PlayerType.LOCAL_HUMAN
                     Text(
                         text = if (isUserTurn) {
-                            if (!viewModel.hasRolled) "YOUR TURN! ROLL DICE 🎲" else "TAP ACTION HIGHLIGHTS TOKEN!"
+                            if (!viewModel.hasRolled) "🎲 TAP DICE IN YOUR RED CORNER TO ROLL!" else "♟️ TAP 3D CHESS PIECE TO HOP ON TRACK!"
                         } else {
-                            "Player ${activePlayer?.name ?: "Opponent"} thinking..."
+                            "⏳ ${activePlayer?.name ?: "Opponent"} thinking & rolling dice..."
                         },
                         color = if (isUserTurn) NeonCyan else GoldPrimary,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
                     )
                     Text(
-                        text = if (viewModel.hasRolled) "Dice Value: ${viewModel.diceValue}" else "Empower your destiny",
+                        text = if (viewModel.hasRolled) "Dice Rolled: ${viewModel.diceValue} • Active 3D movement enabled" else "Each player rolls directly in their section",
                         color = TextGray,
                         fontSize = 10.sp
                     )
                 }
 
-                // Premium Physics 3D dice simulation
-                val isMyTurnToRoll = viewModel.currentTurnColor == PlayerColor.RED && !viewModel.hasRolled && !viewModel.rollingAnimActive
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(
-                            if (isMyTurnToRoll) Brush.radialGradient(colors = listOf(GoldPrimary, Color(0xFFC59F00)))
-                            else Brush.radialGradient(colors = listOf(GlassCardBorder, GlassCard))
-                        )
-                        .border(
-                            1.5.dp,
-                            if (isMyTurnToRoll) NeonCyan else GlassCardBorder,
-                            RoundedCornerShape(14.dp)
-                        )
-                        .scale(if (isMyTurnToRoll && !viewModel.rollingAnimActive) 1.05f else 1f)
-                        .rotate(diceRotation.value)
-                        .clickable(enabled = isMyTurnToRoll) {
-                            viewModel.rollDice()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (viewModel.rollingAnimActive) {
-                        Text(
-                            text = listOf("⚀", "⚁", "⚂", "⚃", "⚄", "⚅").random(),
-                            color = Color.White,
-                            fontSize = 42.sp
-                        )
-                    } else {
-                        val skinSymbol = when (viewModel.selectedDiceSkin) {
-                            "Epic Inferno" -> "🔥"
-                            "Deep Crystal" -> "❄️"
-                            "Cosmic Diamond" -> "💎"
-                            else -> ""
-                        }
-
-                        if (skinSymbol.isNotEmpty() && viewModel.diceValue == 6) {
-                            Text(text = skinSymbol, fontSize = 28.sp)
-                        } else {
-                            Text(
-                                text = when (viewModel.diceValue) {
-                                    1 -> "⚀"
-                                    2 -> "⚁"
-                                    3 -> "⚂"
-                                    4 -> "⚃"
-                                    5 -> "⚄"
-                                    6 -> "⚅"
-                                    else -> "⚀"
-                                },
-                                color = if (isMyTurnToRoll) DeepDarkBg else GoldPrimary,
-                                fontSize = 46.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                if (isUserTurn && !viewModel.hasRolled && !viewModel.rollingAnimActive) {
+                    Button(
+                        onClick = { viewModel.rollDice() },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("🎲 ROLL", color = DeepDarkBg, fontWeight = FontWeight.Black, fontSize = 11.sp)
                     }
                 }
             }
@@ -651,6 +713,289 @@ fun GameScreen(
                 }
             }
         }
+
+        // BOARD STATS & PIECE POSITION TRACKER DIALOG
+        if (showBoardStatsDialog) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { showBoardStatsDialog = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(1.5.dp, GoldPrimary),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(18.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("📊", fontSize = 22.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "BOARD POSITION & PIECE TRACKER",
+                                    color = GoldPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = "Round ${viewModel.roundNumber} • Total Turns: ${viewModel.turnNumber}",
+                                    color = NeonCyan,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Player Positions List
+                        viewModel.playerBoardPositions.forEach { pos ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(GlassCardBorder)
+                                    .border(
+                                        1.dp,
+                                        if (pos.color == viewModel.currentTurnColor) pos.color.color else Color.Transparent,
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .padding(10.dp)
+                            ) {
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(10.dp)
+                                                    .clip(CircleShape)
+                                                    .background(pos.color.color)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = pos.player.name,
+                                                color = TextWhite,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Text(
+                                            text = if (pos.color == viewModel.currentTurnColor) "👉 ACTIVE TURN" else "",
+                                            color = pos.color.color,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    // Piece States: Base, Path, Goal
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "🏠 Base: ${pos.piecesInBase}",
+                                            color = TextGray,
+                                            fontSize = 11.sp
+                                        )
+                                        Text(
+                                            text = "🛣️ Path: ${pos.piecesOnPath}",
+                                            color = NeonCyan,
+                                            fontSize = 11.sp
+                                        )
+                                        Text(
+                                            text = "🏆 Goal: ${pos.piecesInGoal}/4",
+                                            color = GoldPrimary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    // Linear Progress Bar towards victory
+                                    LinearProgressIndicator(
+                                        progress = { pos.progressPercent },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp)),
+                                        color = pos.color.color,
+                                        trackColor = Color.DarkGray
+                                    )
+                                }
+                            }
+                        }
+
+                        // Recent Turn History
+                        if (viewModel.turnHistory.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Recent Turn Events",
+                                color = GoldPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.Start)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            viewModel.turnHistory.takeLast(4).reversed().forEach { event ->
+                                Text(
+                                    text = "• $event",
+                                    color = TextWhite.copy(alpha = 0.8f),
+                                    fontSize = 10.sp,
+                                    lineHeight = 14.sp,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 1.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = { showBoardStatsDialog = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("CLOSE", color = DeepDarkBg, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // CONFIRM MATCH EXIT / FORFEIT DIALOG
+        if (showExitConfirmDialog) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { showExitConfirmDialog = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(1.5.dp, GoldPrimary),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("⚠️", fontSize = 38.sp)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "LEAVE MATCH? / मैच छोड़ें?",
+                            color = GoldPrimary,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            letterSpacing = 1.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Are you sure you want to exit? If you leave now, the current game session and match progress will be terminated.",
+                            color = TextWhite.copy(alpha = 0.85f),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 17.sp
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { showExitConfirmDialog = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = GlassCardBorder),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("CANCEL", color = TextWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    showExitConfirmDialog = false
+                                    viewModel.exitGame()
+                                    onNavigateBack()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = LudoRed),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("EXIT GAME", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3D INTERACTIVE EVENT CELEBRATION POPUP (LUCKY 6, PIECE OPENED, ENEMY CAPTURE)
+        val activeEffect = viewModel.active3DEffect
+        if (activeEffect != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xF2160E27)),
+                    border = BorderStroke(2.5.dp, Brush.linearGradient(listOf(GoldPrimary, activeEffect.color.color, GoldPrimary))),
+                    shape = RoundedCornerShape(22.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(0.92f)
+                        .shadow(24.dp, RoundedCornerShape(22.dp))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = when (activeEffect.type) {
+                                InteractiveEffectType.ROLLED_SIX -> "🎲"
+                                InteractiveEffectType.TOKEN_UNLOCKED -> "🚀"
+                                InteractiveEffectType.CAPTURE -> "⚔️"
+                                InteractiveEffectType.GOAL_SCORED -> "👑"
+                                InteractiveEffectType.EXTRA_TURN -> "✨"
+                            },
+                            fontSize = 52.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = activeEffect.headline,
+                            color = GoldPrimary,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp,
+                            letterSpacing = 1.2.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = activeEffect.detail,
+                            color = TextWhite,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -659,12 +1004,19 @@ fun PlayerWidget(
     player: LudoPlayer,
     isActiveTurn: Boolean,
     color: PlayerColor,
-    score: Int
+    score: Int,
+    position: PlayerBoardPosition? = null,
+    diceValue: Int = 1,
+    isRolling: Boolean = false,
+    hasRolled: Boolean = false,
+    isHuman: Boolean = false,
+    onRollDice: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val transition = rememberInfiniteTransition(label = "active_player")
     val outlineGlow by transition.animateColor(
         initialValue = color.color,
-        targetValue = color.color.copy(alpha = 0.2f),
+        targetValue = color.color.copy(alpha = 0.25f),
         animationSpec = infiniteRepeatable(
             animation = tween(600, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -672,28 +1024,39 @@ fun PlayerWidget(
         label = "glow"
     )
 
+    val dicePulseScale by transition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dice_pulse"
+    )
+
     Card(
         colors = CardDefaults.cardColors(containerColor = GlassCard),
         border = BorderStroke(
-            1.5.dp,
+            if (isActiveTurn) 2.dp else 1.dp,
             if (isActiveTurn) outlineGlow else GlassCardBorder
         ),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .width(155.dp)
-            .shadow(if (isActiveTurn) 8.dp else 0.dp, RoundedCornerShape(12.dp))
+        shape = RoundedCornerShape(14.dp),
+        modifier = modifier
+            .shadow(if (isActiveTurn) 10.dp else 0.dp, RoundedCornerShape(14.dp))
     ) {
         Row(
-            modifier = Modifier.padding(6.dp),
+            modifier = Modifier
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile symbol
+            // Profile symbol with 3D ring
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
-                    .background(color.color.copy(alpha = 0.2f))
-                    .border(1.5.dp, color.color, CircleShape),
+                    .background(color.color.copy(alpha = 0.25f))
+                    .border(2.dp, if (isActiveTurn) color.color else GlassCardBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -719,16 +1082,129 @@ fun PlayerWidget(
             Spacer(modifier = Modifier.width(6.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = player.name,
-                    color = TextWhite,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "Goal: ", color = TextGray, fontSize = 9.sp)
-                    Text(text = "$score/4", color = color.color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = player.name,
+                        color = TextWhite,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isActiveTurn) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(color.color.copy(alpha = 0.3f))
+                                .border(0.8.dp, color.color, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 3.dp, vertical = 1.dp)
+                        ) {
+                            Text("TURN", color = color.color, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                if (position != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(text = "🏠${position.piecesInBase}", color = TextGray, fontSize = 9.sp)
+                        Text(text = "🛣️${position.piecesOnPath}", color = NeonCyan, fontSize = 9.sp)
+                        Text(text = "🏆${position.piecesInGoal}", color = GoldPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Goal: ", color = TextGray, fontSize = 9.sp)
+                        Text(text = "$score/4", color = color.color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // DEDICATED 3D PLAYER DICE IN THIS PLAYER'S PLAY SECTION
+            val canClickToRoll = isActiveTurn && isHuman && !hasRolled && !isRolling
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .scale(if (canClickToRoll) dicePulseScale else 1f)
+                    .background(
+                        if (isActiveTurn) {
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    color.color.copy(alpha = 0.85f),
+                                    Color(0xFF1E1728),
+                                    color.color.copy(alpha = 0.6f)
+                                )
+                            )
+                        } else {
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF1C1625), Color(0xFF100B17))
+                            )
+                        }
+                    )
+                    .border(
+                        1.5.dp,
+                        if (isActiveTurn) color.color else GlassCardBorder,
+                        RoundedCornerShape(10.dp)
+                    )
+                    .clickable(enabled = canClickToRoll) {
+                        onRollDice()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (isActiveTurn) {
+                    if (isRolling) {
+                        Text(
+                            text = listOf("⚀", "⚁", "⚂", "⚃", "⚄", "⚅").random(),
+                            color = Color.White,
+                            fontSize = 28.sp
+                        )
+                    } else if (hasRolled) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = when (diceValue) {
+                                    1 -> "⚀"
+                                    2 -> "⚁"
+                                    3 -> "⚂"
+                                    4 -> "⚃"
+                                    5 -> "⚄"
+                                    6 -> "⚅"
+                                    else -> "⚀"
+                                },
+                                color = if (diceValue == 6) GoldPrimary else Color.White,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    } else {
+                        // Awaiting Roll prompt
+                        if (canClickToRoll) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🎲", fontSize = 16.sp)
+                                Text("ROLL", color = GoldPrimary, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                            }
+                        } else {
+                            Text("🎲", fontSize = 20.sp)
+                        }
+                    }
+                } else {
+                    // Inactive player dice placeholder
+                    Text(
+                        text = when (diceValue) {
+                            1 -> "⚀"
+                            2 -> "⚁"
+                            3 -> "⚂"
+                            4 -> "⚃"
+                            5 -> "⚄"
+                            6 -> "⚅"
+                            else -> "🎲"
+                        },
+                        color = TextGray.copy(alpha = 0.6f),
+                        fontSize = 20.sp
+                    )
                 }
             }
         }

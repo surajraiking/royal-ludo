@@ -31,6 +31,15 @@ data class LudoPlayer(
     var wins: Int = 0
 )
 
+/**
+ * Three fundamental states of a Ludo piece as requested: BASE, PATH, GOAL.
+ */
+enum class PieceState(val label: String, val iconEmoji: String) {
+    BASE("Base", "🏠"),
+    PATH("Path", "🛣️"),
+    GOAL("Goal", "🏆")
+}
+
 enum class TokenState {
     YARD,
     TRACK,
@@ -43,6 +52,61 @@ data class LudoToken(
     val color: PlayerColor,
     var state: TokenState = TokenState.YARD,
     var stepCounter: Int = 0 // 0..50 on track, 51..55 on home stretch, 56 is Goal
+) {
+    val pieceState: PieceState
+        get() = when (state) {
+            TokenState.YARD -> PieceState.BASE
+            TokenState.TRACK, TokenState.HOME_STRETCH -> PieceState.PATH
+            TokenState.GOAL -> PieceState.GOAL
+        }
+
+    val isInBase: Boolean get() = pieceState == PieceState.BASE
+    val isOnPath: Boolean get() = pieceState == PieceState.PATH
+    val isInGoal: Boolean get() = pieceState == PieceState.GOAL
+
+    val remainingSteps: Int get() = (56 - stepCounter).coerceAtLeast(0)
+    val progressPercent: Float get() = (stepCounter / 56f).coerceIn(0f, 1f)
+}
+
+/**
+ * Distinct phases within each player's game turn.
+ */
+enum class TurnPhase(val title: String, val instruction: String) {
+    ROLL_DICE("Roll Dice", "Tap dice to roll"),
+    SELECT_PIECE("Select Piece", "Tap glowing piece to move"),
+    PIECE_MOVING("Moving...", "Piece advancing along path"),
+    NO_MOVES("No Moves", "No moves possible, skipping turn"),
+    EXTRA_TURN("Bonus Turn!", "Extra roll awarded!"),
+    GAME_OVER("Game Over", "Match finished")
+}
+
+/**
+ * Detailed real-time snapshot of the current game turn.
+ */
+data class GameTurnInfo(
+    val roundNumber: Int = 1,
+    val turnNumber: Int = 1,
+    val activeColor: PlayerColor = PlayerColor.RED,
+    val activePlayerName: String = "",
+    val phase: TurnPhase = TurnPhase.ROLL_DICE,
+    val diceRoll: Int? = null,
+    val isHumanTurn: Boolean = true,
+    val bonusReason: String? = null
+)
+
+/**
+ * Comprehensive tracking of a player's position, piece distribution, and board progress.
+ */
+data class PlayerBoardPosition(
+    val player: LudoPlayer,
+    val color: PlayerColor,
+    val pieces: List<LudoToken>,
+    val piecesInBase: Int,
+    val piecesOnPath: Int,
+    val piecesInGoal: Int,
+    val leadingStep: Int,
+    val totalStepsWalked: Int,
+    val progressPercent: Float
 )
 
 enum class GameState {
@@ -149,3 +213,24 @@ data class Particle(
     val velocityY: Float,
     var alpha: Float = 1f
 )
+
+/**
+ * 3D Interactive game announcements and celebration effects
+ */
+enum class InteractiveEffectType {
+    ROLLED_SIX,
+    TOKEN_UNLOCKED,
+    CAPTURE,
+    GOAL_SCORED,
+    EXTRA_TURN
+}
+
+data class Interactive3DEffect(
+    val type: InteractiveEffectType,
+    val headline: String,
+    val detail: String,
+    val color: PlayerColor,
+    val icon: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+

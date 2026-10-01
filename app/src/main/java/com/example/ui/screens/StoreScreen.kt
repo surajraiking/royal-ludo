@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,7 +11,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +42,8 @@ fun StoreScreen(
     viewModel: LudoViewModel,
     onNavigateBack: () -> Unit
 ) {
+    BackHandler { onNavigateBack() }
+
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
 
     val skinsForSale = listOf(
@@ -73,7 +76,7 @@ fun StoreScreen(
                 title = { Text("IMPERIAL PALACE MALL", color = GoldPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = GoldPrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GoldPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepDarkBg)

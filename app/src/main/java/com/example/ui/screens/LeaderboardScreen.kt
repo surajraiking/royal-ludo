@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,6 +42,8 @@ fun LeaderboardScreen(
     viewModel: LudoViewModel,
     onNavigateBack: () -> Unit
 ) {
+    BackHandler { onNavigateBack() }
+
     val firestoreUsers by viewModel.leaderboardUsers.collectAsState()
 
     val leaders = if (firestoreUsers.isNotEmpty()) {

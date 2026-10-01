@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -10,7 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,6 +41,8 @@ fun SpinWheelScreen(
     viewModel: LudoViewModel,
     onNavigateBack: () -> Unit
 ) {
+    BackHandler { onNavigateBack() }
+
     val coroutineScope = rememberCoroutineScope()
     val wheelRotation = remember { Animatable(0f) }
     var spinning by remember { mutableStateOf(false) }
@@ -108,7 +111,7 @@ fun SpinWheelScreen(
                 title = { Text("IMPERIAL WHEEL OF FORTUNE", color = GoldPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = GoldPrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GoldPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepDarkBg)

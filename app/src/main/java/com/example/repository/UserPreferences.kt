@@ -42,6 +42,28 @@ class UserPreferences(context: Context) {
         get() = prefs.getLong("last_spin_timestamp", 0L)
         set(value) = prefs.edit().putLong("last_spin_timestamp", value).apply()
 
+    var userEmail: String
+        get() = prefs.getString("user_email", "") ?: ""
+        set(value) = prefs.edit().putString("user_email", value).apply()
+
+    var isGuestAccount: Boolean
+        get() = prefs.getBoolean("is_guest_account", false)
+        set(value) = prefs.edit().putBoolean("is_guest_account", value).apply()
+
+    var savedAccounts: Set<String>
+        get() = prefs.getStringSet("saved_accounts", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("saved_accounts", value).apply()
+
+    fun registerGamerAccount(email: String, name: String, avatar: String) {
+        userEmail = email
+        username = name
+        avatarId = avatar
+        isGuestAccount = false
+        val current = savedAccounts.toMutableSet()
+        current.add("$email|$name")
+        savedAccounts = current
+    }
+
     fun unlockSkin(skinName: String, costCoins: Int, costGems: Int): Boolean {
         if (coins >= costCoins && gems >= costGems) {
             coins -= costCoins

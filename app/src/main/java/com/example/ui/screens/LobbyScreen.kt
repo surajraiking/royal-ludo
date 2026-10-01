@@ -30,6 +30,8 @@ import com.example.viewmodel.LudoViewModel
 import androidx.credentials.CredentialManager
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import android.content.Intent
+import android.net.Uri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +47,8 @@ fun LobbyScreen(
     val credentialManager = remember { CredentialManager.create(context) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showApkGuideDialog by remember { mutableStateOf(false) }
+    var showCreatorDialog by remember { mutableStateOf(false) }
+    var showFriendsDialog by remember { mutableStateOf(false) }
     var tempName by remember { mutableStateOf(viewModel.username) }
     var tempAvatar by remember { mutableStateOf(viewModel.avatarId) }
 
@@ -212,6 +216,60 @@ fun LobbyScreen(
                 letterSpacing = 1.5.sp,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
+
+            // Mode: PLAY WITH FRIENDS (PRIVATE ROOM / PASS & PLAY)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = GlassCard),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.5.dp, Brush.linearGradient(listOf(LudoGreen, GoldPrimary))),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clickable { showFriendsDialog = true }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(LudoGreen.copy(alpha = 0.2f))
+                            .border(1.dp, LudoGreen, RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("👥", fontSize = 28.sp)
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Play with Friends",
+                                color = TextWhite,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(LudoGreen.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("FRIENDS", color = LudoGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Text(
+                            text = "Private Room Code (कमरा बनाएं/जुड़ें) & Custom Pass-N-Play",
+                            color = TextGray,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play with Friends", tint = LudoGreen)
+                }
+            }
 
             // Mode 1: ONLINE WORLD CUP MATCHMAKING
             Card(
@@ -645,8 +703,263 @@ fun LobbyScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 👑 CREATOR SHOWCASE CARD - SURAJ RAI (@surajraiking22)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = GlassCard),
+                border = BorderStroke(1.5.dp, Brush.linearGradient(listOf(GoldPrimary, NeonCyan))),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showCreatorDialog = true }
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(CircleShape)
+                                .background(Brush.radialGradient(listOf(GoldPrimary, Color(0xFFB8860B))))
+                                .border(2.dp, NeonCyan, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("👑", fontSize = 26.sp)
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Suraj Rai",
+                                    color = GoldPrimary,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(NeonCyan.copy(alpha = 0.2f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("LEAD CREATOR", color = NeonCyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Text(
+                                text = "@surajraiking",
+                                color = NeonCyan,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = "Verified Creator",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Royal Ludo Empire Architect • Connect & follow on social media:",
+                        color = TextWhite.copy(alpha = 0.85f),
+                        fontSize = 11.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Social Media Handle Chips
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Instagram
+                        SocialChip(
+                            icon = "📸",
+                            label = "Insta",
+                            onClick = {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/surajraiking")))
+                                } catch (e: Exception) {}
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Facebook
+                        SocialChip(
+                            icon = "📘",
+                            label = "Facebook",
+                            onClick = {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://facebook.com/surajraiking21")))
+                                } catch (e: Exception) {}
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // YouTube
+                        SocialChip(
+                            icon = "▶️",
+                            label = "YouTube",
+                            onClick = {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtube.com/sanatanmythologytales")))
+                                } catch (e: Exception) {}
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Email
+                        SocialChip(
+                            icon = "✉️",
+                            label = "Email",
+                            onClick = {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:surajraiking22@gmail.com")))
+                                } catch (e: Exception) {}
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
             
             Spacer(modifier = Modifier.height(40.dp))
+        }
+
+        // CREATOR SHOWCASE DIALOG
+        if (showCreatorDialog) {
+            Dialog(onDismissRequest = { showCreatorDialog = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(GoldPrimary, NeonCyan))),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(22.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .clip(CircleShape)
+                                .background(Brush.radialGradient(listOf(GoldPrimary, Color(0xFF8B6508))))
+                                .border(2.5.dp, NeonCyan, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("👑", fontSize = 38.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Suraj Rai",
+                            color = GoldPrimary,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp,
+                            letterSpacing = 1.sp
+                        )
+
+                        Text(
+                            text = "@surajraiking",
+                            color = NeonCyan,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "Lead Creator & Visionary behind Royal Ludo Empire. Designed with AAA visuals, real-time multiplayer, and intelligent AI.",
+                            color = TextWhite.copy(alpha = 0.85f),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Connect Links
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CreatorLinkButton(
+                                title = "Instagram: @surajraiking",
+                                subtitle = "Follow updates & announcements",
+                                icon = "📸",
+                                color = Color(0xFFE1306C),
+                                onClick = {
+                                    try {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/surajraiking")))
+                                    } catch (e: Exception) {}
+                                }
+                            )
+
+                            CreatorLinkButton(
+                                title = "Facebook: @surajraiking21",
+                                subtitle = "Official Facebook profile & community",
+                                icon = "📘",
+                                color = Color(0xFF1877F2),
+                                onClick = {
+                                    try {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://facebook.com/surajraiking21")))
+                                    } catch (e: Exception) {}
+                                }
+                            )
+
+                            CreatorLinkButton(
+                                title = "YouTube: Sanatan Mythology Tales",
+                                subtitle = "Epic mythology episodes & stories",
+                                icon = "▶️",
+                                color = Color(0xFFFF0000),
+                                onClick = {
+                                    try {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtube.com/sanatanmythologytales")))
+                                    } catch (e: Exception) {}
+                                }
+                            )
+
+                            CreatorLinkButton(
+                                title = "Email: surajraiking22@gmail.com",
+                                subtitle = "Business inquiries & collaborations",
+                                icon = "✉️",
+                                color = LudoGreen,
+                                onClick = {
+                                    try {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:surajraiking22@gmail.com")))
+                                    } catch (e: Exception) {}
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Button(
+                            onClick = { showCreatorDialog = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("CLOSE", color = DeepDarkBg, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
 
         // APK & GITHUB GUIDE DIALOG
@@ -905,5 +1218,475 @@ fun LobbyScreen(
                 }
             }
         }
+
+        // 👥 PLAY WITH FRIENDS DIALOG (ROOM CODE & PASS-N-PLAY)
+        if (showFriendsDialog) {
+            Dialog(onDismissRequest = { showFriendsDialog = false }) {
+                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                var friendTab by remember { mutableStateOf(0) } // 0: Room Code, 1: Pass & Play
+                var isCreateRoomMode by remember { mutableStateOf(true) }
+                var generatedRoomCode by remember { mutableStateOf("ROYAL-" + (1000..9999).random()) }
+                var enteredRoomCode by remember { mutableStateOf("") }
+                var codeCopiedToast by remember { mutableStateOf(false) }
+
+                // Pass & play state
+                var playerCount by remember { mutableStateOf(4) }
+                var p1Name by remember { mutableStateOf(viewModel.username) }
+                var p2Name by remember { mutableStateOf("Friend 2") }
+                var p3Name by remember { mutableStateOf("Friend 3") }
+                var p4Name by remember { mutableStateOf("Friend 4") }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(1.5.dp, Brush.linearGradient(listOf(LudoGreen, GoldPrimary))),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(18.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("👥", fontSize = 24.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "PLAY WITH FRIENDS",
+                                    color = GoldPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = "दोस्तों के साथ खेलें (Room Code / Pass & Play)",
+                                    color = NeonCyan,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Tab Selector
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(GlassCardBorder)
+                                .padding(3.dp)
+                        ) {
+                            listOf("Room Code 🔑", "Pass & Play 📱").forEachIndexed { idx, label ->
+                                val isSelected = friendTab == idx
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) GoldPrimary else Color.Transparent)
+                                        .clickable { friendTab = idx }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) DeepDarkBg else TextWhite,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        if (friendTab == 0) {
+                            // ROOM CODE TAB
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                TextButton(
+                                    onClick = { isCreateRoomMode = true }
+                                ) {
+                                    Text(
+                                        "Create Room",
+                                        color = if (isCreateRoomMode) GoldPrimary else TextGray,
+                                        fontWeight = if (isCreateRoomMode) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                Text(" | ", color = GlassCardBorder, modifier = Modifier.align(Alignment.CenterVertically))
+                                TextButton(
+                                    onClick = { isCreateRoomMode = false }
+                                ) {
+                                    Text(
+                                        "Join Room",
+                                        color = if (!isCreateRoomMode) GoldPrimary else TextGray,
+                                        fontWeight = if (!isCreateRoomMode) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (isCreateRoomMode) {
+                                Text(
+                                    text = "Share this Room Code with your friends:",
+                                    color = TextWhite.copy(alpha = 0.85f),
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Glowing Room Code Display
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(DeepDarkBg)
+                                        .border(1.5.dp, NeonCyan, RoundedCornerShape(12.dp))
+                                        .padding(vertical = 12.dp, horizontal = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = generatedRoomCode,
+                                        color = GoldPrimary,
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 3.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(generatedRoomCode))
+                                            codeCopiedToast = true
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                                        border = BorderStroke(1.dp, NeonCyan)
+                                    ) {
+                                        Text(if (codeCopiedToast) "COPIED! ✅" else "📋 COPY CODE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                val sendIntent = Intent().apply {
+                                                    action = Intent.ACTION_SEND
+                                                    putExtra(Intent.EXTRA_TEXT, "Let's battle in Royal Ludo Empire! 👑 Join my Private Room with Code: $generatedRoomCode\nDownload now and enter code in 'Play with Friends'!")
+                                                    type = "text/plain"
+                                                }
+                                                context.startActivity(Intent.createChooser(sendIntent, "Share Room Code"))
+                                            } catch (e: Exception) {}
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
+                                    ) {
+                                        Text("📲 SHARE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Button(
+                                    onClick = {
+                                        showFriendsDialog = false
+                                        viewModel.startPrivateRoomMatch(generatedRoomCode)
+                                        onNavigateToGame()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary)
+                                ) {
+                                    Text("START PRIVATE MATCH", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            } else {
+                                // Join Room Mode
+                                Text(
+                                    text = "Enter 6-digit Room Code given by friend:",
+                                    color = TextWhite.copy(alpha = 0.85f),
+                                    fontSize = 11.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                OutlinedTextField(
+                                    value = enteredRoomCode,
+                                    onValueChange = { enteredRoomCode = it.uppercase() },
+                                    label = { Text("Room Code (e.g. ROYAL-1234)", fontSize = 12.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = NeonCyan,
+                                        unfocusedBorderColor = GlassCardBorder,
+                                        focusedTextColor = TextWhite,
+                                        unfocusedTextColor = TextWhite,
+                                        focusedLabelColor = NeonCyan,
+                                        unfocusedLabelColor = TextGray
+                                    )
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Button(
+                                    onClick = {
+                                        if (enteredRoomCode.isNotBlank()) {
+                                            showFriendsDialog = false
+                                            viewModel.startPrivateRoomMatch(enteredRoomCode)
+                                            onNavigateToGame()
+                                        }
+                                    },
+                                    enabled = enteredRoomCode.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                                ) {
+                                    Text("JOIN ROOM & PLAY", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        } else {
+                            // PASS & PLAY TAB
+                            Text(
+                                text = "Select Number of Players on this device:",
+                                color = TextWhite.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
+                                modifier = Modifier.align(Alignment.Start)
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(2, 3, 4).forEach { count ->
+                                    val isSelected = playerCount == count
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isSelected) GoldPrimary else GlassCardBorder)
+                                            .border(1.dp, if (isSelected) GoldPrimary else GlassCardBorder, RoundedCornerShape(8.dp))
+                                            .clickable { playerCount = count }
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "$count Players",
+                                            color = if (isSelected) DeepDarkBg else TextWhite,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Text(
+                                text = "Enter Names for each Friend:",
+                                color = TextWhite.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
+                                modifier = Modifier.align(Alignment.Start)
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Name Inputs
+                            OutlinedTextField(
+                                value = p1Name,
+                                onValueChange = { if (it.length <= 15) p1Name = it },
+                                label = { Text("🔴 Player 1 (Red)", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = LudoRed,
+                                    unfocusedBorderColor = GlassCardBorder,
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedLabelColor = LudoRed,
+                                    unfocusedLabelColor = TextGray
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            OutlinedTextField(
+                                value = p2Name,
+                                onValueChange = { if (it.length <= 15) p2Name = it },
+                                label = { Text("🟢 Player 2 (Green)", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = LudoGreen,
+                                    unfocusedBorderColor = GlassCardBorder,
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedLabelColor = LudoGreen,
+                                    unfocusedLabelColor = TextGray
+                                )
+                            )
+
+                            if (playerCount >= 3) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = p3Name,
+                                    onValueChange = { if (it.length <= 15) p3Name = it },
+                                    label = { Text("🟡 Player 3 (Yellow)", fontSize = 11.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = LudoYellow,
+                                        unfocusedBorderColor = GlassCardBorder,
+                                        focusedTextColor = TextWhite,
+                                        unfocusedTextColor = TextWhite,
+                                        focusedLabelColor = LudoYellow,
+                                        unfocusedLabelColor = TextGray
+                                    )
+                                )
+                            }
+
+                            if (playerCount >= 4) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = p4Name,
+                                    onValueChange = { if (it.length <= 15) p4Name = it },
+                                    label = { Text("🔵 Player 4 (Blue)", fontSize = 11.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = LudoBlueVibrant,
+                                        unfocusedBorderColor = GlassCardBorder,
+                                        focusedTextColor = TextWhite,
+                                        unfocusedTextColor = TextWhite,
+                                        focusedLabelColor = LudoBlueVibrant,
+                                        unfocusedLabelColor = TextGray
+                                    )
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Button(
+                                onClick = {
+                                    val names = when (playerCount) {
+                                        2 -> listOf(p1Name, p2Name)
+                                        3 -> listOf(p1Name, p2Name, p3Name)
+                                        else -> listOf(p1Name, p2Name, p3Name, p4Name)
+                                    }
+                                    showFriendsDialog = false
+                                    viewModel.startFriendsCustomGame(names)
+                                    onNavigateToGame()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = LudoGreen)
+                            ) {
+                                Text("START PASS & PLAY BATTLE", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        TextButton(onClick = { showFriendsDialog = false }) {
+                            Text("CLOSE", color = TextGray, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
+
+@Composable
+fun SocialChip(
+    icon: String,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(GlassCardBorder)
+            .border(1.dp, GoldPrimary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(icon, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                color = TextWhite,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+fun CreatorLinkButton(
+    title: String,
+    subtitle: String,
+    icon: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = GlassCardBorder),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(icon, fontSize = 18.sp)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = TextWhite,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    color = TextGray,
+                    fontSize = 10.sp
+                )
+            }
+            Text("➔", color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
