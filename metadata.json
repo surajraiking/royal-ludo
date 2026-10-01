@@ -1,0 +1,6 @@
+{
+  "name": "Royal Ludo Empire",
+  "description": "An ultra-premium modern Ludo game featuring interactive AI, simulated local/online multiplayer, customizable dice skins, slot/wheel rewards, and stunning glowing visuals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

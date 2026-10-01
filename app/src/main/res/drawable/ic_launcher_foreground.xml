@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Clean, bold classic crown of Royal Empire -->
+    <path
+        android:pathData="M24,74h60l-4,-24l-14,14l-12,-24l-12,24l-14,-14Z"
+        android:fillType="nonZero">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="40"
+                android:endX="84"
+                android:endY="74"
+                android:type="linear">
+                <item android:color="#FFFFD700" android:offset="0.0"/>
+                <item android:color="#FFA500" android:offset="1.0"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Base stripe of the crown -->
+    <path
+        android:pathData="M24,74 L84,74"
+        android:strokeWidth="4"
+        android:strokeColor="#FFFFFF" />
+    <!-- Three glowing diamonds on the crown tips -->
+    <path
+        android:pathData="M24,50m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"
+        android:fillColor="#00E5FF" />
+    <path
+        android:pathData="M54,40m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"
+        android:fillColor="#00E5FF" />
+    <path
+        android:pathData="M84,50m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"
+        android:fillColor="#00E5FF" />
+</vector>
