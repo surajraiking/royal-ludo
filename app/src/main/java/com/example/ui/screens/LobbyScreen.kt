@@ -24,7 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.model.PlayerType
+import com.example.model.*
 import com.example.ui.theme.*
 import com.example.viewmodel.LudoViewModel
 import androidx.credentials.CredentialManager
@@ -49,10 +49,18 @@ fun LobbyScreen(
     var showApkGuideDialog by remember { mutableStateOf(false) }
     var showCreatorDialog by remember { mutableStateOf(false) }
     var showFriendsDialog by remember { mutableStateOf(false) }
+    var showAuthRequiredDialog by remember { mutableStateOf(false) }
     var tempName by remember { mutableStateOf(viewModel.username) }
     var tempAvatar by remember { mutableStateOf(viewModel.avatarId) }
 
     val avatars = listOf("👑", "🦁", "🏎️", "🐉", "🦄", "👽")
+
+    // Automatically navigate to GameScreen when room match starts!
+    LaunchedEffect(viewModel.gameState) {
+        if (viewModel.gameState == GameState.PLAYING) {
+            onNavigateToGame()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -1228,7 +1236,7 @@ fun LobbyScreen(
                 val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
                 var friendTab by remember { mutableStateOf(0) } // 0: Room Code, 1: Pass & Play
                 var isCreateRoomMode by remember { mutableStateOf(true) }
-                var generatedRoomCode by remember { mutableStateOf("ROYAL-" + (1000..9999).random()) }
+                var generatedRoomCode by remember { mutableStateOf((100000..999999).random().toString()) }
                 var enteredRoomCode by remember { mutableStateOf("") }
                 var codeCopiedToast by remember { mutableStateOf(false) }
 
@@ -1408,14 +1416,18 @@ fun LobbyScreen(
 
                                 Button(
                                     onClick = {
-                                        showFriendsDialog = false
-                                        viewModel.startPrivateRoomMatch(generatedRoomCode)
-                                        onNavigateToGame()
+                                        if (Firebase.auth.currentUser == null) {
+                                            showFriendsDialog = false
+                                            showAuthRequiredDialog = true
+                                        } else {
+                                            showFriendsDialog = false
+                                            viewModel.createOnlineRoom(code = generatedRoomCode)
+                                        }
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary)
                                 ) {
-                                    Text("START PRIVATE MATCH", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("CREATE ROOM (WAIT FOR FRIENDS) 👑", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 }
                             } else {
                                 // Join Room Mode
@@ -1429,8 +1441,8 @@ fun LobbyScreen(
 
                                 OutlinedTextField(
                                     value = enteredRoomCode,
-                                    onValueChange = { enteredRoomCode = it.uppercase() },
-                                    label = { Text("Room Code (e.g. ROYAL-1234)", fontSize = 12.sp) },
+                                    onValueChange = { enteredRoomCode = it.trim().uppercase() },
+                                    label = { Text("Room Code (e.g. 583921)", fontSize = 12.sp) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = OutlinedTextFieldDefaults.colors(
@@ -1447,17 +1459,22 @@ fun LobbyScreen(
 
                                 Button(
                                     onClick = {
-                                        if (enteredRoomCode.isNotBlank()) {
-                                            showFriendsDialog = false
-                                            viewModel.startPrivateRoomMatch(enteredRoomCode)
-                                            onNavigateToGame()
+                                        val cleanCode = enteredRoomCode.trim().uppercase()
+                                        if (cleanCode.isNotBlank()) {
+                                            if (Firebase.auth.currentUser == null) {
+                                                showFriendsDialog = false
+                                                showAuthRequiredDialog = true
+                                            } else {
+                                                showFriendsDialog = false
+                                                viewModel.joinOnlineRoom(cleanCode)
+                                            }
                                         }
                                     },
-                                    enabled = enteredRoomCode.isNotBlank(),
+                                    enabled = enteredRoomCode.trim().isNotBlank(),
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                                 ) {
-                                    Text("JOIN ROOM & PLAY", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("JOIN ROOM & PLAY 🔑", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                             }
                         } else {
@@ -1606,6 +1623,391 @@ fun LobbyScreen(
                         TextButton(onClick = { showFriendsDialog = false }) {
                             Text("CLOSE", color = TextGray, fontSize = 12.sp)
                         }
+                    }
+                }
+            }
+        }
+
+        // 🏰 REAL-TIME CLOUD WAITING ROOM (PLAY WITH FRIENDS LOBBY)
+        if (viewModel.isWaitingRoomVisible) {
+            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+            var codeCopiedToast by remember { mutableStateOf(false) }
+            val roomCode = viewModel.activeRoomCode ?: ""
+            val isHost = viewModel.isRoomHost
+            val players = viewModel.waitingRoomPlayers
+
+            Dialog(onDismissRequest = { /* Prevent accidental dismissal, force using Leave/Cancel button */ }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(GoldPrimary, NeonCyan))),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Title Header
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("👑", fontSize = 26.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "PRIVATE ROOM LOBBY",
+                                    color = GoldPrimary,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = if (isHost) "You are the Room Host 👑" else "Connected as Guest Player 🎮",
+                                    color = NeonCyan,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Room Code Big Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = DeepDarkBg),
+                            border = BorderStroke(1.5.dp, NeonCyan),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(14.dp)
+                                    .fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "ROOM CODE (कमरे का कोड)",
+                                    color = TextGray,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = roomCode,
+                                    color = GoldPrimary,
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 4.sp
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(roomCode))
+                                            codeCopiedToast = true
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                                        border = BorderStroke(1.dp, NeonCyan),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(if (codeCopiedToast) "COPIED! ✅" else "📋 COPY CODE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                val sendIntent = Intent().apply {
+                                                    action = Intent.ACTION_SEND
+                                                    putExtra(
+                                                        Intent.EXTRA_TEXT,
+                                                        "Let's play Ludo together! 👑 Join my Private Room with Code: $roomCode\nOpen Royal Ludo Empire -> Play with Friends -> Join Room -> Enter $roomCode!"
+                                                    )
+                                                    type = "text/plain"
+                                                }
+                                                context.startActivity(Intent.createChooser(sendIntent, "Share Room Code"))
+                                            } catch (e: Exception) {}
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("📲 SHARE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Players Joined List (4 Slots: Red, Green, Yellow, Blue)
+                        Text(
+                            text = "PLAYERS JOINED (${players.size}/4)",
+                            color = TextWhite,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.Start)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val slotColors = listOf(
+                            Triple("Seat 1 (Red)", LudoRed, PlayerColor.RED),
+                            Triple("Seat 2 (Green)", LudoGreen, PlayerColor.GREEN),
+                            Triple("Seat 3 (Yellow)", LudoYellow, PlayerColor.YELLOW),
+                            Triple("Seat 4 (Blue)", LudoBlue, PlayerColor.BLUE)
+                        )
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            slotColors.forEachIndexed { index, (seatLabel, seatColor, playerColor) ->
+                                val joinedPlayer = players.getOrNull(index)
+                                val isMe = joinedPlayer?.uid == Firebase.auth.currentUser?.uid
+
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (joinedPlayer != null) GlassCardBorder else DeepDarkBg.copy(alpha = 0.5f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (joinedPlayer != null) seatColor else GlassCardBorder
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Avatar / Status Circle
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(seatColor.copy(alpha = 0.2f))
+                                                .border(1.5.dp, seatColor, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (joinedPlayer != null) {
+                                                Text(joinedPlayer.avatarId.ifBlank { "👑" }, fontSize = 18.sp)
+                                            } else {
+                                                Text("${index + 1}", color = TextGray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(10.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = if (joinedPlayer != null) {
+                                                        joinedPlayer.name + if (isMe) " (You)" else ""
+                                                    } else {
+                                                        "Waiting for friend..."
+                                                    },
+                                                    color = if (joinedPlayer != null) TextWhite else TextGray,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (joinedPlayer != null) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                                if (joinedPlayer?.isHost == true) {
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("👑 HOST", color = GoldPrimary, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
+                                                }
+                                            }
+                                            Text(
+                                                text = seatLabel,
+                                                color = seatColor,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+
+                                        // Status Chip
+                                        if (joinedPlayer != null) {
+                                            Surface(
+                                                color = Color(0xFF1B5E20),
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "READY ✅",
+                                                    color = Color(0xFF69F0AE),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        } else {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                                color = seatColor.copy(alpha = 0.6f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Status guidance text
+                        if (isHost) {
+                            if (players.size < 2) {
+                                Text(
+                                    text = "⏳ Waiting for friends to join... (Share code $roomCode with your friends to play together!)",
+                                    color = GoldPrimary,
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            } else {
+                                Text(
+                                    text = "🎉 ${players.size}/4 Players Connected! Host can start the game now.",
+                                    color = Color(0xFF69F0AE),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = NeonCyan
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Connected to Room! Waiting for Host to start...",
+                                    color = NeonCyan,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Action Buttons
+                        if (isHost) {
+                            Button(
+                                onClick = { viewModel.startOnlineRoomMatch() },
+                                enabled = players.size >= 2,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GoldPrimary,
+                                    disabledContainerColor = GlassCardBorder
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = if (players.size >= 2) "START MATCH NOW 🚀" else "WAITING FOR PLAYERS (MIN 2)",
+                                    color = if (players.size >= 2) DeepDarkBg else TextGray,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedButton(
+                                onClick = { viewModel.leaveOnlineRoom() },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LudoRed),
+                                border = BorderStroke(1.dp, LudoRed.copy(alpha = 0.7f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("CANCEL & CLOSE ROOM ❌", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.leaveOnlineRoom() },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = LudoRed.copy(alpha = 0.85f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("LEAVE ROOM 🚪", color = TextWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ⚠️ ROOM ERROR DIALOG
+        if (viewModel.roomErrorMessage != null) {
+            AlertDialog(
+                onDismissRequest = { viewModel.roomErrorMessage = null },
+                containerColor = GlassCard,
+                titleContentColor = LudoRed,
+                textContentColor = TextWhite,
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("⚠️", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Room Alert", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                },
+                text = {
+                    Text(
+                        viewModel.roomErrorMessage ?: "",
+                        fontSize = 13.sp,
+                        color = TextWhite
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.roomErrorMessage = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                    ) {
+                        Text("OK", color = DeepDarkBg, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        }
+
+        // ⏳ ROOM CONNECTING PROGRESS DIALOG
+        if (viewModel.isCreatingOrJoiningRoom) {
+            Dialog(onDismissRequest = { }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(1.dp, NeonCyan),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(color = NeonCyan, strokeWidth = 3.dp)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Connecting to Private Room...",
+                            color = TextWhite,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Syncing peer channels in Firestore",
+                            color = TextGray,
+                            fontSize = 11.sp
+                        )
                     }
                 }
             }

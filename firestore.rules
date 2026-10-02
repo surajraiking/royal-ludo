@@ -40,16 +40,11 @@ service cloud.firestore {
 
     // --- 3. Game Room Validation ---
     function isValidGameRoom(data) {
-      return data.roomId is string && data.roomId.size() >= 4 && data.roomId.size() <= 12 &&
+      return data.roomId is string && data.roomId.size() >= 4 && data.roomId.size() <= 20 &&
              data.hostId is string && data.hostId.size() > 0 &&
-             data.hostName is string && data.hostName.size() >= 2 && data.hostName.size() <= 30 &&
-             data.stake is int && data.stake >= 0 &&
-             data.theme is string && data.theme.size() > 0 &&
              data.status in ['waiting', 'playing', 'finished'] &&
              data.playerCount is int && data.playerCount >= 1 && data.playerCount <= 4 &&
-             data.playerIds is list && data.playerIds.size() >= 1 && data.playerIds.size() <= 4 &&
-             data.createdAt is timestamp && data.createdAt <= request.time &&
-             data.updatedAt is timestamp && data.updatedAt <= request.time;
+             data.playerIds is list && data.playerIds.size() >= 1 && data.playerIds.size() <= 4;
     }
 
     // --- Collections ---

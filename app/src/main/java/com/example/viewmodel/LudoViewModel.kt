@@ -16,6 +16,7 @@ import com.example.ui.theme.LudoYellow
 import com.example.ui.theme.LudoBlueVibrant
 import com.example.ui.theme.GoldPrimary
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,13 +85,29 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var turnHistory = mutableStateListOf<String>()
     var activeRoomCode by mutableStateOf<String?>(null)
-        private set
+
+    // REAL-TIME ONLINE ROOM MULTIPLAYER STATES (Ludo King Play with Friends)
+    var isOnlineRoomMatch by mutableStateOf(false)
+    var myOnlineColor by mutableStateOf(PlayerColor.RED)
+    var isRoomHost by mutableStateOf(false)
+    var roomStake by mutableStateOf(500)
+    var waitingRoomPlayers = mutableStateListOf<RoomPlayer>()
+    var isWaitingRoomVisible by mutableStateOf(false)
+    var isCreatingOrJoiningRoom by mutableStateOf(false)
+    var roomErrorMessage by mutableStateOf<String?>(null)
+    private var roomObserverJob: Job? = null
+    private var lastProcessedMoveTimestamp: Long = 0L
 
     /**
      * Real-time GameTurnInfo snapshot for UI observation
      */
     val gameTurnInfo: GameTurnInfo by derivedStateOf {
         val curPlayer = getActivePlayer()
+        val isHumanTurn = if (isOnlineRoomMatch) {
+            currentTurnColor == myOnlineColor
+        } else {
+            curPlayer?.type == PlayerType.LOCAL_HUMAN
+        }
         GameTurnInfo(
             roundNumber = roundNumber,
             turnNumber = turnNumber,
@@ -98,7 +115,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
             activePlayerName = curPlayer?.name ?: currentTurnColor.displayName,
             phase = turnPhase,
             diceRoll = if (hasRolled) diceValue else null,
-            isHumanTurn = curPlayer?.type == PlayerType.LOCAL_HUMAN,
+            isHumanTurn = isHumanTurn,
             bonusReason = bonusTurnReason
         )
     }
@@ -458,7 +475,267 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Start Private Room with friends via 6-digit Room Code
+     * Creates an authoritative Cloud Multiplayer Room in Firestore (Ludo King Play with Friends).
+     */
+    fun createOnlineRoom(stake: Int = 500, code: String? = null) {
+        val uid = firebaseRepo.currentUserId
+        if (uid == null) {
+            roomErrorMessage = "Please sign in with Email or Google to create a Private Room."
+            return
+        }
+        val roomCode = code?.trim()?.uppercase()?.ifBlank { null }
+            ?: (100000..999999).random().toString()
+
+        isCreatingOrJoiningRoom = true
+        roomErrorMessage = null
+
+        viewModelScope.launch {
+            try {
+                val room = firebaseRepo.createMultiplayerRoom(
+                    roomId = roomCode,
+                    hostName = username.ifBlank { "Host" },
+                    avatarId = avatarId,
+                    stake = stake
+                )
+                activeRoomCode = roomCode
+                isRoomHost = true
+                myOnlineColor = PlayerColor.RED
+                roomStake = stake
+                waitingRoomPlayers.clear()
+                waitingRoomPlayers.addAll(room.players)
+                isWaitingRoomVisible = true
+                isCreatingOrJoiningRoom = false
+
+                startObservingOnlineRoom(roomCode)
+            } catch (e: Exception) {
+                isCreatingOrJoiningRoom = false
+                roomErrorMessage = e.localizedMessage ?: "Failed to create room. Please check internet connection."
+            }
+        }
+    }
+
+    /**
+     * Joins an existing Cloud Multiplayer Room in Firestore via 6-digit Room Code.
+     */
+    fun joinOnlineRoom(code: String) {
+        val uid = firebaseRepo.currentUserId
+        if (uid == null) {
+            roomErrorMessage = "Please sign in with Email or Google to join a Private Room."
+            return
+        }
+        val cleanCode = code.trim().uppercase()
+        if (cleanCode.isBlank()) {
+            roomErrorMessage = "Please enter a valid 6-digit Room Code."
+            return
+        }
+
+        isCreatingOrJoiningRoom = true
+        roomErrorMessage = null
+
+        viewModelScope.launch {
+            try {
+                val (room, assignedColor) = firebaseRepo.joinMultiplayerRoom(
+                    roomId = cleanCode,
+                    playerName = username.ifBlank { "Player" },
+                    avatarId = avatarId
+                )
+                activeRoomCode = cleanCode
+                isRoomHost = false
+                myOnlineColor = assignedColor
+                roomStake = room.stake
+                waitingRoomPlayers.clear()
+                waitingRoomPlayers.addAll(room.players)
+                isWaitingRoomVisible = true
+                isCreatingOrJoiningRoom = false
+
+                startObservingOnlineRoom(cleanCode)
+            } catch (e: Exception) {
+                isCreatingOrJoiningRoom = false
+                roomErrorMessage = e.localizedMessage ?: "Could not join room. Verify code with your friend."
+            }
+        }
+    }
+
+    /**
+     * Host starts the Cloud Multiplayer Match once at least 2 players have joined.
+     */
+    fun startOnlineRoomMatch() {
+        val code = activeRoomCode ?: return
+        if (!isRoomHost) {
+            roomErrorMessage = "Only the Host can start the match!"
+            return
+        }
+        if (waitingRoomPlayers.size < 2) {
+            roomErrorMessage = "Waiting for friends to join! Share code $code (Need at least 2 players)."
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                firebaseRepo.startMultiplayerMatch(code)
+            } catch (e: Exception) {
+                roomErrorMessage = e.localizedMessage ?: "Failed to start match"
+            }
+        }
+    }
+
+    /**
+     * Leaves or closes an online room.
+     */
+    fun leaveOnlineRoom() {
+        val code = activeRoomCode
+        roomObserverJob?.cancel()
+        roomObserverJob = null
+        isWaitingRoomVisible = false
+        isOnlineRoomMatch = false
+        activeRoomCode = null
+        roomErrorMessage = null
+        waitingRoomPlayers.clear()
+
+        if (code != null) {
+            viewModelScope.launch {
+                try {
+                    firebaseRepo.leaveMultiplayerRoom(code)
+                } catch (e: Exception) { }
+            }
+        }
+    }
+
+    /**
+     * Observes real-time room state from Firestore.
+     */
+    fun startObservingOnlineRoom(roomId: String) {
+        roomObserverJob?.cancel()
+        roomObserverJob = viewModelScope.launch {
+            firebaseRepo.observeMultiplayerRoom(roomId).collect { room ->
+                if (room == null) {
+                    if (isWaitingRoomVisible) {
+                        roomErrorMessage = "Host has closed the room."
+                        isWaitingRoomVisible = false
+                    }
+                    return@collect
+                }
+
+                // Update waiting room roster in real-time
+                waitingRoomPlayers.clear()
+                waitingRoomPlayers.addAll(room.players)
+
+                // Check status
+                if (room.status == "playing") {
+                    if (!isOnlineRoomMatch) {
+                        // Match just started! Transition into the game!
+                        isWaitingRoomVisible = false
+                        setupOnlineGameFromRoom(room)
+                    } else {
+                        // Game is already running: sync real-time moves & rolls
+                        syncGameStateFromRemote(room)
+                    }
+                } else if (room.status == "finished") {
+                    if (room.winnerColor != null && winner == null) {
+                        val winCol = try { PlayerColor.valueOf(room.winnerColor) } catch (e: Exception) { null }
+                        if (winCol != null) {
+                            winner = players.firstOrNull { it.color == winCol }
+                            triggerVictoryCelebration()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupOnlineGameFromRoom(room: FirebaseGameRoom) {
+        resetGameBoard()
+        isOnlineRoomMatch = true
+        activeRoomCode = room.roomId
+        lobbyMode = PlayerType.ONLINE_SIMULATED
+
+        players.clear()
+        val sortedPlayers = room.players.sortedBy { it.seat }
+        sortedPlayers.forEach { rp ->
+            val col = try { PlayerColor.valueOf(rp.color) } catch (e: Exception) { PlayerColor.RED }
+            val isMe = rp.uid == firebaseRepo.currentUserId
+            val type = if (isMe) PlayerType.LOCAL_HUMAN else PlayerType.ONLINE_SIMULATED
+            val nameDisplay = if (isMe) "${rp.name} (You)" else rp.name
+            players.add(LudoPlayer(color = col, name = nameDisplay, type = type, avatarId = rp.avatarId))
+        }
+
+        viewModelScope.launch {
+            gameStateManager.startNewGame(players.toList(), PlayerColor.RED)
+            tokens.clear()
+            tokens.addAll(gameStateManager.tokens)
+        }
+
+        currentTurnColor = PlayerColor.RED
+        turnPhase = TurnPhase.ROLL_DICE
+        hasRolled = false
+        movableTokenIds.clear()
+        gameState = GameState.PLAYING
+        sendChatMessage("System", "👑 Online Room ${room.roomId} started! Battle your friends to victory.")
+        isVoiceChatActive = true
+    }
+
+    private fun syncGameStateFromRemote(room: FirebaseGameRoom) {
+        val activeTurnColorName = room.currentTurnColor
+        val activeTurnCol = try { PlayerColor.valueOf(activeTurnColorName) } catch (e: Exception) { PlayerColor.RED }
+
+        // 1. Sync remote roll:
+        if (currentTurnColor != myOnlineColor && room.hasRolled && !hasRolled) {
+            diceValue = room.diceValue
+            hasRolled = true
+            movableTokenIds.clear()
+            movableTokenIds.addAll(room.movableTokenIds)
+            turnPhase = try { TurnPhase.valueOf(room.turnPhase) } catch (e: Exception) { TurnPhase.SELECT_PIECE }
+            LudoSoundManager.playDiceRoll()
+            if (diceValue == 6) {
+                LudoSoundManager.playLuckySix()
+                triggerRolledSixEffect(activeTurnCol)
+            }
+        }
+
+        // 2. Sync remote move action:
+        val lastMove = room.lastMove
+        if (lastMove != null && lastMove.timestamp > lastProcessedMoveTimestamp && currentTurnColor != myOnlineColor) {
+            lastProcessedMoveTimestamp = lastMove.timestamp
+            LudoSoundManager.playPieceStep()
+            if (lastMove.wasCapture) {
+                LudoSoundManager.playPieceCapture()
+                val moveCol = try { PlayerColor.valueOf(lastMove.playerColor) } catch (e: Exception) { PlayerColor.RED }
+                triggerCaptureEffect(moveCol, activeTurnCol)
+            }
+            if (lastMove.reachedGoal) {
+                LudoSoundManager.playGoalScored()
+            }
+        }
+
+        // 3. Sync board tokens directly from Firestore:
+        if (movingTokenId == null && currentTurnColor != myOnlineColor) {
+            if (room.tokens.isNotEmpty()) {
+                room.tokens.forEach { rt ->
+                    val c = try { PlayerColor.valueOf(rt.color) } catch (e: Exception) { null }
+                    val s = try { TokenState.valueOf(rt.state) } catch (e: Exception) { null }
+                    if (c != null && s != null) {
+                        val idx = tokens.indexOfFirst { it.color == c && it.id == rt.id }
+                        if (idx != -1 && (tokens[idx].state != s || tokens[idx].stepCounter != rt.stepCounter)) {
+                            tokens[idx] = tokens[idx].copy(state = s, stepCounter = rt.stepCounter)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Sync turn changes:
+        if (currentTurnColor != activeTurnCol) {
+            currentTurnColor = activeTurnCol
+            hasRolled = room.hasRolled
+            turnPhase = try { TurnPhase.valueOf(room.turnPhase) } catch (e: Exception) { TurnPhase.ROLL_DICE }
+            movableTokenIds.clear()
+            movableTokenIds.addAll(room.movableTokenIds)
+            bonusTurnReason = null
+        }
+    }
+
+    /**
+     * Start Private Room fallback for local simulated match
      */
     fun startPrivateRoomMatch(code: String, customNames: List<String> = emptyList()) {
         resetGameBoard()
@@ -562,6 +839,9 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         if (!gameStateManager.canRollDice(currentTurnColor)) return
         if (rollingAnimActive) return
 
+        // In online room match: ONLY the active player whose turn it is can roll
+        if (isOnlineRoomMatch && currentTurnColor != myOnlineColor) return
+
         viewModelScope.launch {
             rollingAnimActive = true
             bonusTurnReason = null
@@ -591,6 +871,14 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                         icon = "⚠️"
                     )
                     LudoSoundManager.playTurnPass()
+
+                    if (isOnlineRoomMatch) {
+                        val nextCol = LudoEngine.getNextTurnColor(currentTurnColor, players)
+                        activeRoomCode?.let { code ->
+                            firebaseRepo.syncOnlineAdvanceTurn(code, nextCol)
+                        }
+                    }
+
                     delay(1500)
                     active3DEffect = null
                     advanceTurn()
@@ -602,6 +890,21 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                     LudoSoundManager.playTurnPass()
                     turnPhase = TurnPhase.NO_MOVES
                     center3DTextHeadline = "NO MOVES POSSIBLE"
+
+                    if (isOnlineRoomMatch) {
+                        val nextCol = LudoEngine.getNextTurnColor(currentTurnColor, players)
+                        activeRoomCode?.let { code ->
+                            firebaseRepo.syncOnlineDiceRoll(
+                                roomId = code,
+                                diceValue = diceValue,
+                                consecutiveSixCount = consecutiveSixCount,
+                                legalMoves = emptyList(),
+                                nextPhase = TurnPhase.NO_MOVES.name
+                            )
+                            firebaseRepo.syncOnlineAdvanceTurn(code, nextCol)
+                        }
+                    }
+
                     delay(1000)
                     advanceTurn()
                 }
@@ -611,13 +914,25 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                     movableTokenIds.clear()
                     movableTokenIds.addAll(rollResult.legalMoves)
 
+                    if (isOnlineRoomMatch) {
+                        activeRoomCode?.let { code ->
+                            firebaseRepo.syncOnlineDiceRoll(
+                                roomId = code,
+                                diceValue = diceValue,
+                                consecutiveSixCount = consecutiveSixCount,
+                                legalMoves = rollResult.legalMoves,
+                                nextPhase = TurnPhase.SELECT_PIECE.name
+                            )
+                        }
+                    }
+
                     if (rollResult.diceValue == 6) {
                         LudoSoundManager.playLuckySix()
                         triggerRolledSixEffect(currentTurnColor)
                     }
 
                     val curPlayer = getActivePlayer()
-                    val isHuman = curPlayer != null && curPlayer.type == PlayerType.LOCAL_HUMAN
+                    val isHuman = if (isOnlineRoomMatch) (currentTurnColor == myOnlineColor) else (curPlayer != null && curPlayer.type == PlayerType.LOCAL_HUMAN)
 
                     if (isHuman) {
                         if (rollResult.autoMoveTokenId != null) {
@@ -651,6 +966,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun moveToken(token: LudoToken) {
         if (!gameStateManager.canMoveToken(token.color, token.id)) return
+        if (isOnlineRoomMatch && token.color != myOnlineColor) return
 
         movableTokenIds.clear()
         hasRolled = false
@@ -708,8 +1024,11 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                     movingTokenColor = null
                     movingTokenId = null
 
+                    val wasCapture = moveResult.moveResult.capturedTokens.isNotEmpty()
+                    val reachedGoal = moveResult.moveResult.reachedGoal
+
                     // Captures
-                    if (moveResult.moveResult.capturedTokens.isNotEmpty()) {
+                    if (wasCapture) {
                         LudoSoundManager.playPieceCapture()
                         val captured = moveResult.moveResult.capturedTokens.first()
                         triggerCaptureEffect(token.color, captured.color)
@@ -717,7 +1036,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     // Goal
-                    if (moveResult.moveResult.reachedGoal) {
+                    if (reachedGoal) {
                         LudoSoundManager.playGoalScored()
                         triggerGoalEffect(token.color)
                     }
@@ -726,11 +1045,54 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                     if (moveResult.isVictory) {
                         LudoSoundManager.playGrandVictory()
                         triggerVictoryCelebration()
+
+                        if (isOnlineRoomMatch) {
+                            activeRoomCode?.let { code ->
+                                firebaseRepo.syncOnlineTokenMove(
+                                    roomId = code,
+                                    updatedTokens = gameStateManager.tokens,
+                                    nextTurnColor = currentTurnColor,
+                                    nextPhase = TurnPhase.GAME_OVER.name,
+                                    winnerColor = currentTurnColor,
+                                    winnerName = username,
+                                    lastMoveAction = RoomMoveAction(
+                                        playerColor = token.color.name,
+                                        tokenId = token.id,
+                                        diceValue = diceValue,
+                                        wasCapture = wasCapture,
+                                        reachedGoal = reachedGoal,
+                                        timestamp = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                        }
                         return@launch
                     }
 
+                    val grantsExtra = moveResult.grantsExtraTurn
+                    val nextColor = if (grantsExtra) currentTurnColor else moveResult.nextTurnColor
+
+                    if (isOnlineRoomMatch) {
+                        activeRoomCode?.let { code ->
+                            firebaseRepo.syncOnlineTokenMove(
+                                roomId = code,
+                                updatedTokens = gameStateManager.tokens,
+                                nextTurnColor = nextColor,
+                                nextPhase = TurnPhase.ROLL_DICE.name,
+                                lastMoveAction = RoomMoveAction(
+                                    playerColor = token.color.name,
+                                    tokenId = token.id,
+                                    diceValue = diceValue,
+                                    wasCapture = wasCapture,
+                                    reachedGoal = reachedGoal,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                    }
+
                     // Bonus turn or advance turn
-                    if (moveResult.grantsExtraTurn) {
+                    if (grantsExtra) {
                         val reason = moveResult.bonusReason ?: "Bonus Roll!"
                         bonusTurnReason = reason
                         turnPhase = TurnPhase.EXTRA_TURN
@@ -740,7 +1102,8 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
 
                         hasRolled = false
                         val activeP = getActivePlayer()
-                        if (activeP != null && activeP.type != PlayerType.LOCAL_HUMAN) {
+                        val isHuman = if (isOnlineRoomMatch) (currentTurnColor == myOnlineColor) else (activeP != null && activeP.type == PlayerType.LOCAL_HUMAN)
+                        if (!isHuman && activeP != null) {
                             delay(1000)
                             rollDice()
                         }
@@ -889,8 +1252,8 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         turnHistory.add("Round $roundNumber, Turn $turnNumber: ${nextPlayer?.name ?: currentTurnColor.displayName}'s turn")
         if (turnHistory.size > 25) turnHistory.removeAt(0)
 
-        // Sync AI Turn trigger immediately if the next player is not human
-        if (nextPlayer != null && nextPlayer.type != PlayerType.LOCAL_HUMAN) {
+        // Sync AI Turn trigger immediately ONLY if offline AI game! In online room matches, remote players roll!
+        if (!isOnlineRoomMatch && nextPlayer != null && nextPlayer.type != PlayerType.LOCAL_HUMAN) {
             viewModelScope.launch {
                 delay(1000)
                 rollDice()
@@ -901,6 +1264,11 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
     private fun advanceTurn() {
         viewModelScope.launch {
             val nextColor = gameStateManager.advanceTurn()
+            if (isOnlineRoomMatch) {
+                activeRoomCode?.let { code ->
+                    firebaseRepo.syncOnlineAdvanceTurn(code, nextColor)
+                }
+            }
             advanceTurnVisuals(nextColor)
         }
     }

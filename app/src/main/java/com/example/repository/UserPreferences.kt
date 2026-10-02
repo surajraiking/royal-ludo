@@ -95,6 +95,10 @@ class UserPreferences(context: Context) {
         return false
     }
 
+    var customWebClientId: String
+        get() = prefs.getString("custom_web_client_id", "") ?: ""
+        set(value) = prefs.edit().putString("custom_web_client_id", value).apply()
+
     fun earnCoins(amount: Int) {
         coins += amount
     }

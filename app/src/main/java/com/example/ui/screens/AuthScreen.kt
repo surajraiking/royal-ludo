@@ -37,6 +37,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
+import com.example.repository.LudoFirebaseRepository
 import com.example.repository.UserPreferences
 import com.example.ui.theme.*
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -44,11 +45,38 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+
+fun resolveServerClientId(context: Context): String? {
+    val prefs = UserPreferences(context)
+    if (prefs.customWebClientId.isNotBlank()) {
+        return prefs.customWebClientId.trim()
+    }
+    return try {
+        val resourceId = context.resources.getIdentifier(
+            "default_web_client_id",
+            "string",
+            context.packageName
+        )
+        if (resourceId != 0) {
+            val id = context.getString(resourceId).trim()
+            if (id.isNotBlank()) id else null
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
 
 fun attemptAutoSignIn(
     context: Context,
@@ -61,18 +89,7 @@ fun attemptAutoSignIn(
         onAuthSuccess()
         return
     }
-    val clientId = try {
-        val resourceId = context.resources.getIdentifier(
-            "default_web_client_id",
-            "string",
-            context.packageName
-        )
-        if (resourceId == 0) {
-            onUnauthenticated()
-            return
-        }
-        context.getString(resourceId)
-    } catch (e: Exception) {
+    val clientId = resolveServerClientId(context) ?: run {
         onUnauthenticated()
         return
     }
@@ -111,19 +128,9 @@ fun onGoogleSignInClicked(
     scope: CoroutineScope,
     onAuthCancelled: () -> Unit = {}
 ) {
-    val clientId = try {
-        val resourceId = context.resources.getIdentifier(
-            "default_web_client_id",
-            "string",
-            context.packageName
-        )
-        if (resourceId == 0) {
-            onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
-            return
-        }
-        context.getString(resourceId)
-    } catch (e: Exception) {
-        onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
+    val clientId = resolveServerClientId(context)
+    if (clientId == null) {
+        onAuthError("Google Sign-In client ID is not configured yet. Please configure it via ⚙️ or use the 'Email / Gamer ID' tab to register & play immediately!")
         return
     }
 
@@ -143,11 +150,16 @@ fun onGoogleSignInClicked(
                 onAuthError("Unexpected credential type")
             }
         } catch (e: GetCredentialCancellationException) {
-            Log.w("Auth", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
+            Log.w("Auth", "Google Sign-In flow cancelled: ${e.message}", e)
             onAuthCancelled()
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "Sign in failed")
+            val msg = e.localizedMessage ?: "Sign in failed"
+            if (msg.contains("16:") || msg.contains("10:") || msg.contains("Developer")) {
+                onAuthError("Google Sign-In: Web Client ID mismatch in Firebase. Please use 'Email / Gamer ID' to register and play, or tap ⚙️ to set your Web Client ID.")
+            } else {
+                onAuthError(msg)
+            }
         }
     }
 }
@@ -195,9 +207,20 @@ fun AuthScreen(
     var isSignUpMode by remember { mutableStateOf(false) }
     var emailOrUsername by remember { mutableStateOf(userPrefs.userEmail.ifEmpty { userPrefs.username }) }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var customNickname by remember { mutableStateOf(userPrefs.username) }
     var selectedAvatar by remember { mutableStateOf(userPrefs.avatarId) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var forgotPasswordEmail by remember { mutableStateOf("") }
+    var isSendingResetEmail by remember { mutableStateOf(false) }
+    var showEmailSentDialog by remember { mutableStateOf(false) }
+    var sentVerificationEmailAddress by remember { mutableStateOf("") }
+    var showClientIdConfigDialog by remember { mutableStateOf(false) }
+    var inputCustomClientId by remember { mutableStateOf(userPrefs.customWebClientId) }
+    var showResendVerificationButton by remember { mutableStateOf(false) }
+    var isResendingVerification by remember { mutableStateOf(false) }
 
     // Guest Play state
     var guestName by remember { mutableStateOf("Warrior #${(100..999).random()}") }
@@ -445,6 +468,21 @@ fun AuthScreen(
                                 modifier = Modifier.clickable { selectedTab = AuthTab.GUEST }
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "⚙️ Configure Web Client ID (Optional)",
+                                color = TextGray.copy(alpha = 0.8f),
+                                fontSize = 10.sp,
+                                modifier = Modifier.clickable { showClientIdConfigDialog = true }
+                            )
+                        }
                     }
 
                     AuthTab.GAMER_ACCOUNT -> {
@@ -512,12 +550,13 @@ fun AuthScreen(
                             Spacer(modifier = Modifier.height(10.dp))
                         }
 
-                        // Email / Username Input
+                        // Email Input
                         OutlinedTextField(
                             value = emailOrUsername,
                             onValueChange = { emailOrUsername = it },
-                            label = { Text("Email or Gamer Tag", fontSize = 12.sp) },
+                            label = { Text(if (isSignUpMode) "Email Address (for verification)" else "Email Address", fontSize = 12.sp) },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonCyan,
@@ -555,7 +594,7 @@ fun AuthScreen(
                         OutlinedTextField(
                             value = password,
                             onValueChange = { password = it },
-                            label = { Text("Password", fontSize = 12.sp) },
+                            label = { Text(if (isSignUpMode) "Create Password (min 6 chars)" else "Password", fontSize = 12.sp) },
                             singleLine = true,
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
@@ -578,34 +617,155 @@ fun AuthScreen(
                             )
                         )
 
+                        // Confirm Password (Only in Signup Mode)
+                        if (isSignUpMode) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = confirmPassword,
+                                onValueChange = { confirmPassword = it },
+                                label = { Text("Confirm Password", fontSize = 12.sp) },
+                                singleLine = true,
+                                visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                        Icon(
+                                            imageVector = if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                            contentDescription = "Toggle confirm password",
+                                            tint = TextGray
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = GlassCardBorder,
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedLabelColor = NeonCyan,
+                                    unfocusedLabelColor = TextGray
+                                )
+                            )
+                        }
+
+                        // Forgot Password Link (for Login mode)
+                        if (!isSignUpMode) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Text(
+                                    text = "Forgot Password? ✉️",
+                                    color = NeonCyan,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.clickable {
+                                        forgotPasswordEmail = emailOrUsername.trim()
+                                        showForgotPasswordDialog = true
+                                    }
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
-                                if (emailOrUsername.isBlank()) {
-                                    errorMessage = "Please enter an Email or Gamer Tag"
+                                val email = emailOrUsername.trim()
+                                if (email.isBlank()) {
+                                    errorMessage = "Please enter your email address"
                                     return@Button
                                 }
-                                if (password.length < 4) {
-                                    errorMessage = "Password must be at least 4 characters"
+                                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                    errorMessage = "Please enter a valid email address (e.g. name@domain.com)"
+                                    return@Button
+                                }
+                                if (password.length < 6) {
+                                    errorMessage = "Password must be at least 6 characters"
+                                    return@Button
+                                }
+                                if (isSignUpMode && password != confirmPassword) {
+                                    errorMessage = "Passwords do not match! Please check your confirm password."
                                     return@Button
                                 }
 
-                                val finalName = if (isSignUpMode && customNickname.isNotBlank()) {
-                                    customNickname
-                                } else {
-                                    emailOrUsername.substringBefore("@").take(15)
+                                isLoading = true
+                                errorMessage = null
+                                successMessage = null
+
+                                coroutineScope.launch {
+                                    if (isSignUpMode) {
+                                        // 1. REAL FIREBASE EMAIL SIGN UP + VERIFICATION LINK
+                                        try {
+                                            val authResult = Firebase.auth.createUserWithEmailAndPassword(email, password).await()
+                                            val user = authResult.user
+                                            try {
+                                                user?.sendEmailVerification()?.await()
+                                            } catch (e: Exception) {
+                                                Log.w("Auth", "Verification email send warning", e)
+                                            }
+
+                                            val finalName = if (customNickname.isNotBlank()) customNickname.trim() else email.substringBefore("@")
+                                            userPrefs.registerGamerAccount(email, finalName, selectedAvatar)
+
+                                            // Sign out immediately until email is verified
+                                            Firebase.auth.signOut()
+
+                                            sentVerificationEmailAddress = email
+                                            showEmailSentDialog = true
+                                            isSignUpMode = false // Switch to log in tab
+                                            password = ""
+                                            confirmPassword = ""
+                                            successMessage = "✉️ Verification email sent to $email! Please verify and then log in."
+                                        } catch (e: FirebaseAuthUserCollisionException) {
+                                            errorMessage = "⚠️ Account already exists with this email! Please Log In with your password."
+                                            isSignUpMode = false // Switch to Log In mode
+                                        } catch (e: FirebaseAuthWeakPasswordException) {
+                                            errorMessage = "⚠️ Password too weak! Please use at least 6 characters."
+                                        } catch (e: Exception) {
+                                            errorMessage = e.localizedMessage ?: "Registration failed. Check internet."
+                                        } finally {
+                                            isLoading = false
+                                        }
+                                    } else {
+                                        // 2. REAL FIREBASE EMAIL SIGN IN
+                                        try {
+                                            val authResult = Firebase.auth.signInWithEmailAndPassword(email, password).await()
+                                            val user = authResult.user
+                                            if (user != null) {
+                                                try {
+                                                    user.reload().await()
+                                                } catch (e: Exception) { }
+
+                                                if (!user.isEmailVerified) {
+                                                    errorMessage = "⚠️ Email not verified yet! Please check your email inbox (and Spam folder) to verify $email before logging in."
+                                                    showResendVerificationButton = true
+                                                    Firebase.auth.signOut()
+                                                    return@launch
+                                                }
+
+                                                val finalName = userPrefs.username.ifBlank { email.substringBefore("@") }
+                                                val repo = LudoFirebaseRepository(context)
+                                                try {
+                                                    repo.saveOrInitUserProfile(username = finalName, avatarId = selectedAvatar)
+                                                } catch (e: Exception) { }
+
+                                                successMessage = "Welcome back, $finalName!"
+                                                onAuthSuccess()
+                                            }
+                                        } catch (e: FirebaseAuthInvalidUserException) {
+                                            errorMessage = "⚠️ No account found with this email. Click 'Create Account' to register."
+                                        } catch (e: FirebaseAuthInvalidCredentialsException) {
+                                            errorMessage = "⚠️ Incorrect password! Please enter the password you created, or tap 'Forgot Password?'."
+                                        } catch (e: Exception) {
+                                            errorMessage = e.localizedMessage ?: "Login failed. Check your password."
+                                        } finally {
+                                            isLoading = false
+                                        }
+                                    }
                                 }
-
-                                userPrefs.registerGamerAccount(
-                                    email = if (emailOrUsername.contains("@")) emailOrUsername else "$emailOrUsername@ludo.empire",
-                                    name = finalName,
-                                    avatar = selectedAvatar
-                                )
-
-                                successMessage = if (isSignUpMode) "Account created! Entering palace..." else "Welcome back, $finalName!"
-                                onGuestOrCustomLogin(finalName, selectedAvatar)
                             },
+                            enabled = !isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp),
@@ -615,11 +775,54 @@ fun AuthScreen(
                                 contentColor = DeepDarkBg
                             )
                         ) {
-                            Text(
-                                text = if (isSignUpMode) "CREATE & ENTER PALACE" else "LOG IN TO EMPIRE",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                            if (isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = DeepDarkBg, strokeWidth = 2.dp)
+                            } else {
+                                Text(
+                                    text = if (isSignUpMode) "CREATE ACCOUNT & SEND VERIFICATION" else "LOG IN TO EMPIRE",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        // Resend Verification Email Button
+                        if (showResendVerificationButton && !isSignUpMode) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    val email = emailOrUsername.trim()
+                                    if (email.isBlank() || password.length < 6) {
+                                        errorMessage = "Please enter your email and password above to resend verification email."
+                                        return@OutlinedButton
+                                    }
+                                    isResendingVerification = true
+                                    coroutineScope.launch {
+                                        try {
+                                            val res = Firebase.auth.signInWithEmailAndPassword(email, password).await()
+                                            res.user?.sendEmailVerification()?.await()
+                                            Firebase.auth.signOut()
+                                            successMessage = "✉️ Verification email resent to $email! Check inbox & spam folder."
+                                            errorMessage = null
+                                            showResendVerificationButton = false
+                                        } catch (e: Exception) {
+                                            errorMessage = "Failed to resend: ${e.localizedMessage}"
+                                        } finally {
+                                            isResendingVerification = false
+                                        }
+                                    }
+                                },
+                                enabled = !isResendingVerification,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, NeonCyan)
+                            ) {
+                                if (isResendingVerification) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = NeonCyan, strokeWidth = 2.dp)
+                                } else {
+                                    Text("✉️ Resend Verification Email Link", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
 
@@ -707,6 +910,289 @@ fun AuthScreen(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ✉️ FORGOT PASSWORD DIALOG
+        if (showForgotPasswordDialog) {
+            Dialog(onDismissRequest = { showForgotPasswordDialog = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(1.5.dp, GoldPrimary),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(GoldPrimary.copy(alpha = 0.15f))
+                                .border(1.5.dp, GoldPrimary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✉️", fontSize = 24.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "Reset Password via Email",
+                            color = GoldPrimary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = "Enter your registered email address. Firebase will send an official password reset link directly to your inbox.",
+                            color = TextWhite.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 16.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = forgotPasswordEmail,
+                            onValueChange = { forgotPasswordEmail = it },
+                            label = { Text("Registered Email Address", fontSize = 12.sp) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = GlassCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedLabelColor = NeonCyan,
+                                unfocusedLabelColor = TextGray
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showForgotPasswordDialog = false },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, GlassCardBorder)
+                            ) {
+                                Text("CANCEL", color = TextGray, fontSize = 12.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val targetEmail = forgotPasswordEmail.trim()
+                                    if (targetEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(targetEmail).matches()) {
+                                        errorMessage = "Please enter a valid email address for password reset"
+                                        return@Button
+                                    }
+
+                                    isSendingResetEmail = true
+                                    coroutineScope.launch {
+                                        try {
+                                            Firebase.auth.sendPasswordResetEmail(targetEmail).await()
+                                            successMessage = "✉️ Password reset link sent to $targetEmail! Check your inbox or spam folder."
+                                            showForgotPasswordDialog = false
+                                        } catch (e: Exception) {
+                                            errorMessage = e.localizedMessage ?: "Failed to send reset email. Verify your address."
+                                        } finally {
+                                            isSendingResetEmail = false
+                                        }
+                                    }
+                                },
+                                enabled = !isSendingResetEmail,
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (isSendingResetEmail) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = DeepDarkBg, strokeWidth = 2.dp)
+                                } else {
+                                    Text("SEND LINK", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 📧 VERIFICATION EMAIL SENT POPUP DIALOG
+        if (showEmailSentDialog) {
+            Dialog(onDismissRequest = { showEmailSentDialog = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(2.dp, GoldPrimary),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(22.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(NeonCyan.copy(alpha = 0.2f))
+                                .border(2.dp, NeonCyan, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✉️", fontSize = 28.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Verification Email Sent!",
+                            color = GoldPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "An official activation link has been sent to:\n$sentVerificationEmailAddress",
+                            color = NeonCyan,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "1. Open your Gmail / Email app.\n2. Check Inbox and Spam / Junk folder.\n3. Click the link to verify your account.\n4. Return here and Log In with your password to play!",
+                            color = TextWhite.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Start,
+                            lineHeight = 17.sp,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Button(
+                            onClick = {
+                                showEmailSentDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "OK, GO TO LOG IN",
+                                color = DeepDarkBg,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ⚙️ GOOGLE WEB CLIENT ID CONFIGURATION DIALOG
+        if (showClientIdConfigDialog) {
+            Dialog(onDismissRequest = { showClientIdConfigDialog = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GlassCard),
+                    border = BorderStroke(1.5.dp, GoldPrimary),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "⚙️ Google Web Client ID",
+                            color = GoldPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "If your Firebase project uses a custom OAuth Web Client ID, paste it below (e.g. 505688495811-xxx.apps.googleusercontent.com):",
+                            color = TextWhite.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = inputCustomClientId,
+                            onValueChange = { inputCustomClientId = it },
+                            label = { Text("Web Client ID", fontSize = 11.sp) },
+                            singleLine = false,
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = GlassCardBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedLabelColor = NeonCyan,
+                                unfocusedLabelColor = TextGray
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showClientIdConfigDialog = false },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, GlassCardBorder)
+                            ) {
+                                Text("CANCEL", color = TextGray, fontSize = 11.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    userPrefs.customWebClientId = inputCustomClientId.trim()
+                                    showClientIdConfigDialog = false
+                                    successMessage = "Web Client ID saved!"
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("SAVE", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             }
                         }
                     }
