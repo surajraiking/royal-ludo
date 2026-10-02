@@ -1,4 +1,5 @@
 name: Build APK and AAB (Android)
+# Build trigger verified 2026-10-02
 
 on:
   push:
