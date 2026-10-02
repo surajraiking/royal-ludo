@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "505688495811",
+    "firebase_url": "https://rai-king-ludo-default-rtdb.firebaseio.com",
+    "project_id": "rai-king-ludo",
+    "storage_bucket": "rai-king-ludo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:505688495811:android:52df9fd5d570f30fe8f476",
+        "android_client_info": {
+          "package_name": "com.surajrai.raikingludo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBw9pILcsUFJSmCL-_WYBJhH6fn7lwi0qQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
