@@ -505,7 +505,7 @@ fun LobbyScreen(
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
-            val skins = listOf("Neon Gold", "Epic Inferno", "Deep Crystal", "Cosmic Diamond")
+            val skins = listOf("Neon Gold", "Epic Inferno", "Deep Crystal", "Cosmic Diamond", "Royal Emerald", "Obsidian Shadow", "Solar Flare")
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -545,6 +545,9 @@ fun LobbyScreen(
                                             "Neon Gold" -> Brush.radialGradient(colors = listOf(GoldPrimary, GoldDark))
                                             "Epic Inferno" -> Brush.radialGradient(colors = listOf(LudoRed, Color(0xFF630018)))
                                             "Deep Crystal" -> Brush.radialGradient(colors = listOf(NeonCyan, LudoBlue))
+                                            "Royal Emerald" -> Brush.radialGradient(colors = listOf(LudoGreen, Color(0xFF00382B)))
+                                            "Obsidian Shadow" -> Brush.radialGradient(colors = listOf(Color(0xFF4A3E5C), Color(0xFF15101F)))
+                                            "Solar Flare" -> Brush.radialGradient(colors = listOf(Color(0xFFFF9800), Color(0xFFB23A00)))
                                             else -> Brush.radialGradient(colors = listOf(Color.White, Color.Gray))
                                         }
                                     ),

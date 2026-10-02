@@ -52,6 +52,7 @@ fun LudoBoardGridComponent(
     onTokenClicked: (LudoToken) -> Unit,
     modifier: Modifier = Modifier,
     movingTokenId: Int? = null,
+    movingTokenColor: PlayerColor? = null,
     center3DText: String = "ROYAL 3D LUDO",
     boardGrid: LudoBoardGrid = remember { LudoBoardGrid() }
 ) {
@@ -103,27 +104,57 @@ fun LudoBoardGridComponent(
         val boardSidePx = with(LocalDensity.current) { boardSideDp.toPx() }
         val cellSizePx = boardSidePx / 15f
 
-        // Group tokens by their (row, col) grid coordinates
-        val tokenClusters = remember(tokens) {
-            tokens.groupBy { getTokenGridPosition(it) }
-        }
+        // Freshly computed token groupings by grid coordinates (NO stale remember)
+        val tokenClusters = tokens.groupBy { getTokenGridPosition(it) }
 
         Canvas(
             modifier = Modifier
                 .size(boardSideDp)
-                .pointerInput(tokens, movableTokenIds, currentTurnColor) {
+                .pointerInput(tokens.map { "${it.color}_${it.id}_${it.state}_${it.stepCounter}" }, movableTokenIds.toList(), currentTurnColor) {
                     detectTapGestures { tapOffset ->
                         val col = (tapOffset.x / cellSizePx).toInt().coerceIn(0, 14)
                         val row = (tapOffset.y / cellSizePx).toInt().coerceIn(0, 14)
-                        val tappedCoord = Pair(row, col)
 
-                        val tokensHere = tokenClusters[tappedCoord] ?: emptyList()
-                        val targetToken = tokensHere.firstOrNull { token ->
-                            token.color == currentTurnColor && movableTokenIds.contains(token.id)
-                        } ?: tokensHere.firstOrNull { it.color == currentTurnColor }
+                        val currentMovableTokens = tokens.filter { it.color == currentTurnColor && movableTokenIds.contains(it.id) }
+                        if (currentMovableTokens.isEmpty()) return@detectTapGestures
 
-                        if (targetToken != null && movableTokenIds.contains(targetToken.id)) {
-                            onTokenClicked(targetToken)
+                        // 1. Check if user tapped inside current player's yard base
+                        val isTappingBase = when (currentTurnColor) {
+                            PlayerColor.RED -> row in 0..5 && col in 0..5
+                            PlayerColor.GREEN -> row in 0..5 && col in 9..14
+                            PlayerColor.YELLOW -> row in 9..14 && col in 9..14
+                            PlayerColor.BLUE -> row in 9..14 && col in 0..5
+                        }
+
+                        if (isTappingBase) {
+                            val yardMovable = currentMovableTokens.firstOrNull { it.state == TokenState.YARD }
+                            if (yardMovable != null) {
+                                onTokenClicked(yardMovable)
+                                return@detectTapGestures
+                            }
+                        }
+
+                        // 2. Check distance to each movable token on the board with generous touch target
+                        var bestToken: LudoToken? = null
+                        var bestDistSq = Float.MAX_VALUE
+                        val maxRadiusPx = cellSizePx * 2.2f // Generous touch target: over 2 cells radius!
+
+                        for (cand in currentMovableTokens) {
+                            val pos = getTokenGridPosition(cand)
+                            val candCenterPx = Offset((pos.second + 0.5f) * cellSizePx, (pos.first + 0.5f) * cellSizePx)
+                            val distSq = (tapOffset.x - candCenterPx.x) * (tapOffset.x - candCenterPx.x) +
+                                         (tapOffset.y - candCenterPx.y) * (tapOffset.y - candCenterPx.y)
+                            if (distSq < bestDistSq && distSq <= maxRadiusPx * maxRadiusPx) {
+                                bestDistSq = distSq
+                                bestToken = cand
+                            }
+                        }
+
+                        if (bestToken != null) {
+                            onTokenClicked(bestToken)
+                        } else if (currentMovableTokens.size == 1) {
+                            // If only 1 token is movable and user tapped on the board, execute that move
+                            onTokenClicked(currentMovableTokens.first())
                         }
                     }
                 }
@@ -156,7 +187,7 @@ fun LudoBoardGridComponent(
                 if (tokensInCell.size == 1) {
                     val singleToken = tokensInCell.first()
                     val isMovable = singleToken.color == currentTurnColor && movableTokenIds.contains(singleToken.id)
-                    val isMoving = singleToken.id == movingTokenId
+                    val isMoving = (movingTokenColor == null || singleToken.color == movingTokenColor) && singleToken.id == movingTokenId
 
                     draw3DChessPiece(
                         token = singleToken,
@@ -180,7 +211,7 @@ fun LudoBoardGridComponent(
                             centerPx.y + (offsetDistance * sin(rad)).toFloat()
                         )
                         val isMovable = stackedToken.color == currentTurnColor && movableTokenIds.contains(stackedToken.id)
-                        val isMoving = stackedToken.id == movingTokenId
+                        val isMoving = (movingTokenColor == null || stackedToken.color == movingTokenColor) && stackedToken.id == movingTokenId
 
                         draw3DChessPiece(
                             token = stackedToken,

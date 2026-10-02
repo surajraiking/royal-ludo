@@ -6,20 +6,32 @@ import android.content.SharedPreferences
 class UserPreferences(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("royal_ludo_empire_prefs", Context.MODE_PRIVATE)
 
+    companion object {
+        val ALL_AVAILABLE_SKINS = setOf(
+            "Neon Gold",
+            "Epic Inferno",
+            "Deep Crystal",
+            "Cosmic Diamond",
+            "Royal Emerald",
+            "Obsidian Shadow",
+            "Solar Flare"
+        )
+    }
+
     var username: String
         get() = prefs.getString("username", "RoyalWarrior") ?: "RoyalWarrior"
         set(value) = prefs.edit().putString("username", value).apply()
 
     var avatarId: String
-        get() = prefs.getString("avatar_id", "avatar_1") ?: "avatar_1"
+        get() = prefs.getString("avatar_id", "avatar_crown") ?: "avatar_crown"
         set(value) = prefs.edit().putString("avatar_id", value).apply()
 
     var coins: Int
-        get() = prefs.getInt("coins", 1500)
+        get() = prefs.getInt("coins", 50000)
         set(value) = prefs.edit().putInt("coins", value).apply()
 
     var gems: Int
-        get() = prefs.getInt("gems", 100)
+        get() = prefs.getInt("gems", 5000)
         set(value) = prefs.edit().putInt("gems", value).apply()
 
     var matchesPlayed: Int
@@ -35,7 +47,14 @@ class UserPreferences(context: Context) {
         set(value) = prefs.edit().putString("selected_dice_skin", value).apply()
 
     var unlockedSkins: Set<String>
-        get() = prefs.getStringSet("unlocked_skins", setOf("Neon Gold")) ?: setOf("Neon Gold")
+        get() {
+            val saved = prefs.getStringSet("unlocked_skins", null)
+            return if (saved.isNullOrEmpty()) {
+                ALL_AVAILABLE_SKINS
+            } else {
+                saved + ALL_AVAILABLE_SKINS
+            }
+        }
         set(value) = prefs.edit().putStringSet("unlocked_skins", value).apply()
 
     var lastSpinTimestamp: Long

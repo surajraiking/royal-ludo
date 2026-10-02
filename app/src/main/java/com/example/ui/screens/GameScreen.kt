@@ -326,6 +326,7 @@ fun GameScreen(
                 currentTurnColor = viewModel.currentTurnColor,
                 onTokenClicked = { tok -> viewModel.moveToken(tok) },
                 movingTokenId = viewModel.movingTokenId,
+                movingTokenColor = viewModel.movingTokenColor,
                 center3DText = viewModel.center3DTextHeadline,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -341,7 +342,7 @@ fun GameScreen(
                     .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Player RED (You) (Turn Index 0)
+                // Player RED (Turn Index 0)
                 val redPlayer = viewModel.players.getOrNull(0)
                 if (redPlayer != null) {
                     val isRedTurn = viewModel.currentTurnColor == PlayerColor.RED
@@ -382,47 +383,84 @@ fun GameScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // 5. INTERACTIVE 3D TURN GUIDANCE & TACTICAL STATUS
-            Row(
+            // 5. INTERACTIVE 3D TURN GUIDANCE & TACTICAL ACTION HUD
+            val activePlayer = viewModel.getActivePlayer()
+            val isCurrentPlayerHuman = activePlayer?.type == PlayerType.LOCAL_HUMAN
+            val activeColor = viewModel.currentTurnColor
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .background(GlassCard)
                     .border(1.dp, GlassCardBorder, RoundedCornerShape(14.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                val activePlayer = viewModel.getActivePlayer()
-                val isUserTurn = viewModel.currentTurnColor == PlayerColor.RED && activePlayer?.type == PlayerType.LOCAL_HUMAN
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isCurrentPlayerHuman) {
+                                if (!viewModel.hasRolled) "🎲 ROLL DICE IN ${activeColor.displayName.uppercase()} CORNER OR TAP BUTTON"
+                                else "♟️ TAP YOUR CHESS PIECE ON BOARD TO MOVE"
+                            } else {
+                                "⏳ ${activePlayer?.name ?: "Opponent"} thinking & rolling dice..."
+                            },
+                            color = if (isCurrentPlayerHuman) activeColor.color else GoldPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Text(
+                            text = if (viewModel.hasRolled) "Dice: ${viewModel.diceValue} • Active square-by-square 3D hop enabled"
+                            else "Each player's 3D dice is in their corner section",
+                            color = TextGray,
+                            fontSize = 10.sp
+                        )
+                    }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (isUserTurn) {
-                            if (!viewModel.hasRolled) "🎲 TAP DICE IN YOUR RED CORNER TO ROLL!" else "♟️ TAP 3D CHESS PIECE TO HOP ON TRACK!"
-                        } else {
-                            "⏳ ${activePlayer?.name ?: "Opponent"} thinking & rolling dice..."
-                        },
-                        color = if (isUserTurn) NeonCyan else GoldPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
-                    Text(
-                        text = if (viewModel.hasRolled) "Dice Rolled: ${viewModel.diceValue} • Active 3D movement enabled" else "Each player rolls directly in their section",
-                        color = TextGray,
-                        fontSize = 10.sp
-                    )
+                    if (isCurrentPlayerHuman && !viewModel.hasRolled && !viewModel.rollingAnimActive) {
+                        Button(
+                            onClick = { viewModel.rollDice() },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text("🎲 ROLL", color = DeepDarkBg, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                        }
+                    }
                 }
 
-                if (isUserTurn && !viewModel.hasRolled && !viewModel.rollingAnimActive) {
-                    Button(
-                        onClick = { viewModel.rollDice() },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                // Quick direct action chips for movable tokens (Zero friction Ludo King experience)
+                if (isCurrentPlayerHuman && viewModel.hasRolled && viewModel.movableTokenIds.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("🎲 ROLL", color = DeepDarkBg, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                        Text("Tap to move: ", color = TextWhite.copy(alpha = 0.8f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        val movableTokens = viewModel.tokens.filter { it.color == activeColor && viewModel.movableTokenIds.contains(it.id) }
+                        movableTokens.forEach { tok ->
+                            val chipText = when (tok.state) {
+                                TokenState.YARD -> "🚀 Release (#${tok.id + 1})"
+                                TokenState.TRACK -> "♟️ Step ${tok.stepCounter} (+${viewModel.diceValue})"
+                                TokenState.HOME_STRETCH -> "👑 Home ${tok.stepCounter - 50} (+${viewModel.diceValue})"
+                                TokenState.GOAL -> "Goal"
+                            }
+                            Button(
+                                onClick = { viewModel.moveToken(tok) },
+                                colors = ButtonDefaults.buttonColors(containerColor = activeColor.color),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text(chipText, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
@@ -1123,39 +1161,33 @@ fun PlayerWidget(
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            // DEDICATED 3D PLAYER DICE IN THIS PLAYER'S PLAY SECTION
-            val canClickToRoll = isActiveTurn && isHuman && !hasRolled && !isRolling
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .scale(if (canClickToRoll) dicePulseScale else 1f)
-                    .background(
-                        if (isActiveTurn) {
+            // DEDICATED 3D PLAYER DICE IN ACTIVE PLAYER'S PLAY SECTION ONLY
+            if (isActiveTurn) {
+                val canClickToRoll = isHuman && !hasRolled && !isRolling
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .scale(if (canClickToRoll) dicePulseScale else 1f)
+                        .background(
                             Brush.linearGradient(
                                 colors = listOf(
-                                    color.color.copy(alpha = 0.85f),
-                                    Color(0xFF1E1728),
-                                    color.color.copy(alpha = 0.6f)
+                                    color.color.copy(alpha = 0.9f),
+                                    Color(0xFF241A32),
+                                    color.color.copy(alpha = 0.65f)
                                 )
                             )
-                        } else {
-                            Brush.linearGradient(
-                                colors = listOf(Color(0xFF1C1625), Color(0xFF100B17))
-                            )
-                        }
-                    )
-                    .border(
-                        1.5.dp,
-                        if (isActiveTurn) color.color else GlassCardBorder,
-                        RoundedCornerShape(10.dp)
-                    )
-                    .clickable(enabled = canClickToRoll) {
-                        onRollDice()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (isActiveTurn) {
+                        )
+                        .border(
+                            2.dp,
+                            color.color,
+                            RoundedCornerShape(12.dp)
+                        )
+                        .clickable(enabled = canClickToRoll) {
+                            onRollDice()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
                     if (isRolling) {
                         Text(
                             text = listOf("⚀", "⚁", "⚂", "⚃", "⚄", "⚅").random(),
@@ -1163,22 +1195,20 @@ fun PlayerWidget(
                             fontSize = 28.sp
                         )
                     } else if (hasRolled) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = when (diceValue) {
-                                    1 -> "⚀"
-                                    2 -> "⚁"
-                                    3 -> "⚂"
-                                    4 -> "⚃"
-                                    5 -> "⚄"
-                                    6 -> "⚅"
-                                    else -> "⚀"
-                                },
-                                color = if (diceValue == 6) GoldPrimary else Color.White,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
+                        Text(
+                            text = when (diceValue) {
+                                1 -> "⚀"
+                                2 -> "⚁"
+                                3 -> "⚂"
+                                4 -> "⚃"
+                                5 -> "⚄"
+                                6 -> "⚅"
+                                else -> "⚀"
+                            },
+                            color = if (diceValue == 6) GoldPrimary else Color.White,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Black
+                        )
                     } else {
                         // Awaiting Roll prompt
                         if (canClickToRoll) {
@@ -1187,23 +1217,23 @@ fun PlayerWidget(
                                 Text("ROLL", color = GoldPrimary, fontSize = 8.sp, fontWeight = FontWeight.Black)
                             }
                         } else {
-                            Text("🎲", fontSize = 20.sp)
+                            Text("🎲", fontSize = 22.sp)
                         }
                     }
-                } else {
-                    // Inactive player dice placeholder
+                }
+            } else {
+                // Inactive player: no dice shown (strictly only the active player shows dice)
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.04f))
+                        .border(0.8.dp, GlassCardBorder.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = when (diceValue) {
-                            1 -> "⚀"
-                            2 -> "⚁"
-                            3 -> "⚂"
-                            4 -> "⚃"
-                            5 -> "⚄"
-                            6 -> "⚅"
-                            else -> "🎲"
-                        },
-                        color = TextGray.copy(alpha = 0.6f),
-                        fontSize = 20.sp
+                        text = "⏳",
+                        fontSize = 13.sp
                     )
                 }
             }

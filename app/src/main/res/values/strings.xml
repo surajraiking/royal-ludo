@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Royal Ludo Empire</string>
+    <string name="default_web_client_id" translatable="false">605970234259-mdgji4abbj0pru4n0h4r1s1ei4kqfi85.apps.googleusercontent.com</string>
 </resources>
