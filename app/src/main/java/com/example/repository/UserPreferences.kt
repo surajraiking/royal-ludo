@@ -19,7 +19,7 @@ class UserPreferences(context: Context) {
     }
 
     var username: String
-        get() = prefs.getString("username", "RoyalWarrior") ?: "RoyalWarrior"
+        get() = prefs.getString("username", "Suraj Rai") ?: "Suraj Rai"
         set(value) = prefs.edit().putString("username", value).apply()
 
     var avatarId: String

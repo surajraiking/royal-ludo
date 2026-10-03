@@ -48,11 +48,13 @@ class LudoFirebaseRepository(private val context: Context) {
         get() = Firebase.auth
 
     val currentUserId: String?
-        get() = auth.currentUser?.uid
+        get() = auth.currentUser?.uid ?: run {
+            val prefs = UserPreferences(context)
+            "guest_${prefs.username.replace(" ", "_").ifBlank { "player" }}"
+        }
 
     fun requireUserId(): String {
-        return auth.currentUser?.uid
-            ?: throw IllegalStateException("User must be signed in before accessing cloud services.")
+        return currentUserId ?: "guest_player"
     }
 
     // Observe authenticated user's profile in real-time
@@ -92,7 +94,7 @@ class LudoFirebaseRepository(private val context: Context) {
         if (!snapshot.exists()) {
             val payload = mapOf(
                 "userId" to uid,
-                "username" to username.ifBlank { "RoyalWarrior" },
+                "username" to username.ifBlank { "Suraj Rai" },
                 "avatarId" to avatarId,
                 "coins" to initialCoins,
                 "gems" to initialGems,

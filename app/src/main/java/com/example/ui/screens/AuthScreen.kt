@@ -237,7 +237,7 @@ fun AuthScreen(
     var isVerifyingOtp by remember { mutableStateOf(false) }
 
     // Guest Play state
-    var guestName by remember { mutableStateOf("Warrior #${(100..999).random()}") }
+    var guestName by remember { mutableStateOf("Suraj Rai") }
     var guestAvatar by remember { mutableStateOf("avatar_crown") }
 
     val avatarOptions = listOf(
@@ -1071,8 +1071,8 @@ fun AuthScreen(
 
                         OutlinedTextField(
                             value = guestName,
-                            onValueChange = { if (it.length <= 15) guestName = it },
-                            label = { Text("Guest Warrior Name", fontSize = 12.sp) },
+                            onValueChange = { if (it.length <= 25) guestName = it },
+                            label = { Text("Player Name", fontSize = 12.sp) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -1089,7 +1089,7 @@ fun AuthScreen(
 
                         Button(
                             onClick = {
-                                val finalName = guestName.ifBlank { "Guest Warrior" }
+                                val finalName = guestName.ifBlank { "Suraj Rai" }
                                 userPrefs.username = finalName
                                 userPrefs.avatarId = guestAvatar
                                 userPrefs.isGuestAccount = true

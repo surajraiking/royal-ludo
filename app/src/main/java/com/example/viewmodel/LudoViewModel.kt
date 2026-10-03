@@ -87,6 +87,55 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
     var turnHistory = mutableStateListOf<String>()
     var activeRoomCode by mutableStateOf<String?>(null)
 
+    // 60-Second Turn Countdown Timer State
+    var turnRemainingSeconds by mutableStateOf(60)
+        private set
+    var turnTimerProgress by mutableStateOf(1.0f)
+        private set
+    private var turnTimerJob: Job? = null
+
+    fun startTurnTimer() {
+        turnTimerJob?.cancel()
+        turnRemainingSeconds = 60
+        turnTimerProgress = 1.0f
+
+        turnTimerJob = viewModelScope.launch {
+            val totalSeconds = 60
+            for (sec in totalSeconds downTo 0) {
+                turnRemainingSeconds = sec
+                turnTimerProgress = sec.toFloat() / totalSeconds.toFloat()
+                if (sec == 0) {
+                    onTurnTimerExpired()
+                    break
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    fun stopTurnTimer() {
+        turnTimerJob?.cancel()
+    }
+
+    private fun onTurnTimerExpired() {
+        viewModelScope.launch {
+            if (!hasRolled && gameStateManager.canRollDice(currentTurnColor)) {
+                // Auto roll for the player when 60s timer expires
+                rollDice()
+            } else if (hasRolled && movableTokenIds.isNotEmpty()) {
+                // Auto move the first available movable token
+                val candidateToken = tokens.firstOrNull { it.color == currentTurnColor && movableTokenIds.contains(it.id) }
+                if (candidateToken != null) {
+                    moveToken(candidateToken)
+                } else {
+                    advanceTurn()
+                }
+            } else {
+                advanceTurn()
+            }
+        }
+    }
+
     // REAL-TIME ONLINE ROOM MULTIPLAYER STATES (Ludo King Play with Friends)
     var isOnlineRoomMatch by mutableStateOf(false)
     var myOnlineColor by mutableStateOf(PlayerColor.RED)
@@ -441,7 +490,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
             players.add(
                 LudoPlayer(
                     color = colors[i],
-                    name = if (i == 0) "$username (You)" else "Ludo Warlord ${i + 1}",
+                    name = if (i == 0) "$username (You)" else "Player ${i + 1}",
                     type = pType,
                     avatarId = "avatar_${i + 1}"
                 )
@@ -454,6 +503,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         }
         currentTurnColor = PlayerColor.RED
         gameState = GameState.PLAYING
+        startTurnTimer()
     }
 
     /**
@@ -488,17 +538,13 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         }
         currentTurnColor = PlayerColor.RED
         gameState = GameState.PLAYING
+        startTurnTimer()
     }
 
     /**
      * Creates an authoritative Cloud Multiplayer Room in Firestore (Ludo King Play with Friends).
      */
     fun createOnlineRoom(stake: Int = 500, code: String? = null) {
-        val uid = firebaseRepo.currentUserId
-        if (uid == null) {
-            roomErrorMessage = "Please sign in with Email or Google to create a Private Room."
-            return
-        }
         val roomCode = code?.trim()?.uppercase()?.ifBlank { null }
             ?: (100000..999999).random().toString()
 
@@ -509,7 +555,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val room = firebaseRepo.createMultiplayerRoom(
                     roomId = roomCode,
-                    hostName = username.ifBlank { "Host" },
+                    hostName = username.ifBlank { "Suraj Rai" },
                     avatarId = avatarId,
                     stake = stake
                 )
@@ -534,11 +580,6 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
      * Joins an existing Cloud Multiplayer Room in Firestore via 6-digit Room Code.
      */
     fun joinOnlineRoom(code: String) {
-        val uid = firebaseRepo.currentUserId
-        if (uid == null) {
-            roomErrorMessage = "Please sign in with Email or Google to join a Private Room."
-            return
-        }
         val cleanCode = code.trim().uppercase()
         if (cleanCode.isBlank()) {
             roomErrorMessage = "Please enter a valid 6-digit Room Code."
@@ -552,7 +593,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val (room, assignedColor) = firebaseRepo.joinMultiplayerRoom(
                     roomId = cleanCode,
-                    playerName = username.ifBlank { "Player" },
+                    playerName = username.ifBlank { "Suraj Rai" },
                     avatarId = avatarId
                 )
                 activeRoomCode = cleanCode
@@ -1250,6 +1291,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun exitGame() {
+        stopTurnTimer()
         gameState = GameState.IDLE
         resetGameBoard()
     }
@@ -1267,6 +1309,9 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         val nextPlayer = getActivePlayer()
         turnHistory.add("Round $roundNumber, Turn $turnNumber: ${nextPlayer?.name ?: currentTurnColor.displayName}'s turn")
         if (turnHistory.size > 25) turnHistory.removeAt(0)
+
+        // Start 60-second countdown timer for active player's turn
+        startTurnTimer()
 
         // Sync AI Turn trigger immediately ONLY if offline AI game! In online room matches, remote players roll!
         if (!isOnlineRoomMatch && nextPlayer != null && nextPlayer.type != PlayerType.LOCAL_HUMAN) {

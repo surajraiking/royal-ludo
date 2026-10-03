@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -238,6 +239,8 @@ fun GameScreen(
                         isRolling = isRedTurn && viewModel.rollingAnimActive,
                         hasRolled = isRedTurn && viewModel.hasRolled,
                         isHuman = redPlayer.type == PlayerType.LOCAL_HUMAN,
+                        turnRemainingSeconds = viewModel.turnRemainingSeconds,
+                        turnTimerProgress = viewModel.turnTimerProgress,
                         onRollDice = { if (isRedTurn) viewModel.rollDice() },
                         modifier = Modifier.weight(1f)
                     )
@@ -257,64 +260,113 @@ fun GameScreen(
                         isRolling = isGreenTurn && viewModel.rollingAnimActive,
                         hasRolled = isGreenTurn && viewModel.hasRolled,
                         isHuman = greenPlayer.type == PlayerType.LOCAL_HUMAN,
+                        turnRemainingSeconds = viewModel.turnRemainingSeconds,
+                        turnTimerProgress = viewModel.turnTimerProgress,
                         onRollDice = { if (isGreenTurn) viewModel.rollDice() },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            // Real-Time Turn & Phase HUD Banner
+            // Real-Time Turn & Phase HUD Banner with 60-Second Countdown
             val turnInfo = viewModel.gameTurnInfo
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
                     .background(GlassCard)
                     .border(1.dp, GlassCardBorder, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Round ${turnInfo.roundNumber} • Turn ${turnInfo.turnNumber}",
-                        color = TextWhite,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "(${turnInfo.activePlayerName})",
-                        color = turnInfo.activeColor.color,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                }
-
-                val phaseBadgeColor = when (turnInfo.phase) {
-                    TurnPhase.ROLL_DICE -> GoldPrimary
-                    TurnPhase.SELECT_PIECE -> NeonCyan
-                    TurnPhase.PIECE_MOVING -> LudoYellow
-                    TurnPhase.EXTRA_TURN -> LudoGreen
-                    TurnPhase.NO_MOVES -> LudoRed
-                    TurnPhase.GAME_OVER -> GoldPrimary
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(phaseBadgeColor.copy(alpha = 0.2f))
-                        .border(1.dp, phaseBadgeColor, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = turnInfo.bonusReason ?: turnInfo.phase.title,
-                        color = phaseBadgeColor,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Round ${turnInfo.roundNumber} • Turn ${turnInfo.turnNumber}",
+                            color = TextWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "(${turnInfo.activePlayerName})",
+                            color = turnInfo.activeColor.color,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 60-Second Countdown Badge
+                        val timerColor = when {
+                            viewModel.turnRemainingSeconds > 30 -> Color(0xFF00E676)
+                            viewModel.turnRemainingSeconds > 10 -> Color(0xFFFFD600)
+                            else -> Color(0xFFFF1744)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(timerColor.copy(alpha = 0.2f))
+                                .border(1.dp, timerColor, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "⏱️ ${viewModel.turnRemainingSeconds}s",
+                                color = timerColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        val phaseBadgeColor = when (turnInfo.phase) {
+                            TurnPhase.ROLL_DICE -> GoldPrimary
+                            TurnPhase.SELECT_PIECE -> NeonCyan
+                            TurnPhase.PIECE_MOVING -> LudoYellow
+                            TurnPhase.EXTRA_TURN -> LudoGreen
+                            TurnPhase.NO_MOVES -> LudoRed
+                            TurnPhase.GAME_OVER -> GoldPrimary
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(phaseBadgeColor.copy(alpha = 0.2f))
+                                .border(1.dp, phaseBadgeColor, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = turnInfo.bonusReason ?: turnInfo.phase.title,
+                                color = phaseBadgeColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // 60-Second Linear Progress Bar
+                val barColor = when {
+                    viewModel.turnRemainingSeconds > 30 -> Color(0xFF00E676)
+                    viewModel.turnRemainingSeconds > 10 -> Color(0xFFFFD600)
+                    else -> Color(0xFFFF1744)
+                }
+                LinearProgressIndicator(
+                    progress = { viewModel.turnTimerProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = barColor,
+                    trackColor = Color.White.copy(alpha = 0.1f)
+                )
             }
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -356,6 +408,8 @@ fun GameScreen(
                         isRolling = isBlueTurn && viewModel.rollingAnimActive,
                         hasRolled = isBlueTurn && viewModel.hasRolled,
                         isHuman = bluePlayer.type == PlayerType.LOCAL_HUMAN,
+                        turnRemainingSeconds = viewModel.turnRemainingSeconds,
+                        turnTimerProgress = viewModel.turnTimerProgress,
                         onRollDice = { if (isBlueTurn) viewModel.rollDice() },
                         modifier = Modifier.weight(1f)
                     )
@@ -375,6 +429,8 @@ fun GameScreen(
                         isRolling = isYellowTurn && viewModel.rollingAnimActive,
                         hasRolled = isYellowTurn && viewModel.hasRolled,
                         isHuman = yellowPlayer.type == PlayerType.LOCAL_HUMAN,
+                        turnRemainingSeconds = viewModel.turnRemainingSeconds,
+                        turnTimerProgress = viewModel.turnTimerProgress,
                         onRollDice = { if (isYellowTurn) viewModel.rollDice() },
                         modifier = Modifier.weight(1f)
                     )
@@ -1048,6 +1104,8 @@ fun PlayerWidget(
     isRolling: Boolean = false,
     hasRolled: Boolean = false,
     isHuman: Boolean = false,
+    turnRemainingSeconds: Int = 60,
+    turnTimerProgress: Float = 1.0f,
     onRollDice: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -1088,33 +1146,59 @@ fun PlayerWidget(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile symbol with 3D ring
+            // Profile symbol with 60-second Circular Countdown Timer Ring
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(color.color.copy(alpha = 0.25f))
-                    .border(2.dp, if (isActiveTurn) color.color else GlassCardBorder, CircleShape),
+                modifier = Modifier.size(40.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = when (player.avatarId) {
-                        "avatar_crown" -> "👑"
-                        "avatar_lion" -> "🦁"
-                        "avatar_car" -> "🏎️"
-                        "avatar_dragon" -> "🐉"
-                        "avatar_unicorn" -> "🦄"
-                        "avatar_alien" -> "👽"
-                        "avatar_ai_1" -> "🤖"
-                        "avatar_ai_2" -> "🦾"
-                        "avatar_ai_3" -> "🧠"
-                        "avatar_online_1" -> "⚡"
-                        "avatar_online_2" -> "☄️"
-                        "avatar_online_3" -> "🌌"
-                        else -> "👤"
-                    },
-                    fontSize = 18.sp
-                )
+                if (isActiveTurn) {
+                    val timerColor = when {
+                        turnRemainingSeconds > 30 -> Color(0xFF00E676)
+                        turnRemainingSeconds > 10 -> Color(0xFFFFD600)
+                        else -> Color(0xFFFF1744)
+                    }
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.12f),
+                            style = Stroke(width = 3.dp.toPx())
+                        )
+                        drawArc(
+                            color = timerColor,
+                            startAngle = -90f,
+                            sweepAngle = 360f * turnTimerProgress,
+                            useCenter = false,
+                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(color.color.copy(alpha = 0.25f))
+                        .border(1.5.dp, if (isActiveTurn) color.color else GlassCardBorder, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = when (player.avatarId) {
+                            "avatar_crown" -> "👑"
+                            "avatar_lion" -> "🦁"
+                            "avatar_car" -> "🏎️"
+                            "avatar_dragon" -> "🐉"
+                            "avatar_unicorn" -> "🦄"
+                            "avatar_alien" -> "👽"
+                            "avatar_ai_1" -> "🤖"
+                            "avatar_ai_2" -> "🦾"
+                            "avatar_ai_3" -> "🧠"
+                            "avatar_online_1" -> "⚡"
+                            "avatar_online_2" -> "☄️"
+                            "avatar_online_3" -> "🌌"
+                            else -> "👤"
+                        },
+                        fontSize = 17.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(6.dp))
@@ -1131,14 +1215,20 @@ fun PlayerWidget(
                     )
                     if (isActiveTurn) {
                         Spacer(modifier = Modifier.width(4.dp))
+                        val timerColor = when {
+                            turnRemainingSeconds > 30 -> Color(0xFF00E676)
+                            turnRemainingSeconds > 10 -> Color(0xFFFFD600)
+                            else -> Color(0xFFFF1744)
+                        }
+                        // 60-Second Countdown Pill Badge
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(color.color.copy(alpha = 0.3f))
-                                .border(0.8.dp, color.color, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 3.dp, vertical = 1.dp)
+                                .background(timerColor.copy(alpha = 0.2f))
+                                .border(0.8.dp, timerColor, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
-                            Text("TURN", color = color.color, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                            Text("⏱️ ${turnRemainingSeconds}s", color = timerColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1161,68 +1251,30 @@ fun PlayerWidget(
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            // DEDICATED 3D PLAYER DICE IN ACTIVE PLAYER'S PLAY SECTION ONLY
+            // DEDICATED CLASSIC LUDO DICE IN ACTIVE PLAYER'S PLAY SECTION
             if (isActiveTurn) {
                 val canClickToRoll = isHuman && !hasRolled && !isRolling
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
                         .scale(if (canClickToRoll) dicePulseScale else 1f)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    color.color.copy(alpha = 0.9f),
-                                    Color(0xFF241A32),
-                                    color.color.copy(alpha = 0.65f)
-                                )
-                            )
-                        )
-                        .border(
-                            2.dp,
-                            color.color,
-                            RoundedCornerShape(12.dp)
-                        )
                         .clickable(enabled = canClickToRoll) {
                             onRollDice()
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isRolling) {
-                        Text(
-                            text = listOf("⚀", "⚁", "⚂", "⚃", "⚄", "⚅").random(),
-                            color = Color.White,
-                            fontSize = 28.sp
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        ClassicLudoDiceView(
+                            value = diceValue,
+                            color = color.color,
+                            isRolling = isRolling
                         )
-                    } else if (hasRolled) {
-                        Text(
-                            text = when (diceValue) {
-                                1 -> "⚀"
-                                2 -> "⚁"
-                                3 -> "⚂"
-                                4 -> "⚃"
-                                5 -> "⚄"
-                                6 -> "⚅"
-                                else -> "⚀"
-                            },
-                            color = if (diceValue == 6) GoldPrimary else Color.White,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                    } else {
-                        // Awaiting Roll prompt
                         if (canClickToRoll) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🎲", fontSize = 16.sp)
-                                Text("ROLL", color = GoldPrimary, fontSize = 8.sp, fontWeight = FontWeight.Black)
-                            }
-                        } else {
-                            Text("🎲", fontSize = 22.sp)
+                            Text("ROLL 🎲", color = GoldPrimary, fontSize = 8.sp, fontWeight = FontWeight.Black)
                         }
                     }
                 }
             } else {
-                // Inactive player: no dice shown (strictly only the active player shows dice)
+                // Inactive player: waiting indicator
                 Box(
                     modifier = Modifier
                         .size(34.dp)
@@ -1236,6 +1288,67 @@ fun PlayerWidget(
                         fontSize = 13.sp
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Authentic Classic Ludo King 3D Dice View with crisp rounded cube, colored border, and authentic pips
+ */
+@Composable
+fun ClassicLudoDiceView(
+    value: Int,
+    color: Color,
+    isRolling: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .shadow(4.dp, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White)
+            .border(2.dp, color, RoundedCornerShape(10.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(5.dp)) {
+            val pipRadius = size.width * 0.11f
+            val pipColor = if (value == 6) Color(0xFFE52521) else Color(0xFF1E1E1E)
+
+            val leftX = size.width * 0.23f
+            val midX = size.width * 0.5f
+            val rightX = size.width * 0.77f
+
+            val topY = size.height * 0.23f
+            val midY = size.height * 0.5f
+            val bottomY = size.height * 0.77f
+
+            val pips = when (if (isRolling) (1..6).random() else value) {
+                1 -> listOf(Offset(midX, midY))
+                2 -> listOf(Offset(leftX, topY), Offset(rightX, bottomY))
+                3 -> listOf(Offset(leftX, topY), Offset(midX, midY), Offset(rightX, bottomY))
+                4 -> listOf(Offset(leftX, topY), Offset(rightX, topY), Offset(leftX, bottomY), Offset(rightX, bottomY))
+                5 -> listOf(Offset(leftX, topY), Offset(rightX, topY), Offset(midX, midY), Offset(leftX, bottomY), Offset(rightX, bottomY))
+                6 -> listOf(
+                    Offset(leftX, topY), Offset(rightX, topY),
+                    Offset(leftX, midY), Offset(rightX, midY),
+                    Offset(leftX, bottomY), Offset(rightX, bottomY)
+                )
+                else -> listOf(Offset(midX, midY))
+            }
+
+            pips.forEach { pipOffset ->
+                drawCircle(
+                    color = pipColor,
+                    radius = pipRadius,
+                    center = pipOffset
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.35f),
+                    radius = pipRadius * 0.35f,
+                    center = pipOffset - Offset(pipRadius * 0.2f, pipRadius * 0.2f)
+                )
             }
         }
     }

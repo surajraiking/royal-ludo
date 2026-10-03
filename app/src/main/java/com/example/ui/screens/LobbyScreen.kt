@@ -1136,19 +1136,19 @@ fun LobbyScreen(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        Text("Enter Warrior Name", color = TextWhite, fontSize = 12.sp, modifier = Modifier.align(Alignment.Start))
+                        Text("Enter Player Name", color = TextWhite, fontSize = 12.sp, modifier = Modifier.align(Alignment.Start))
                         Spacer(modifier = Modifier.height(8.dp))
 
                         OutlinedTextField(
                             value = tempName,
-                            onValueChange = { if (it.length <= 15) tempName = it },
+                            onValueChange = { if (it.length <= 25) tempName = it },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonCyan,
                                 unfocusedBorderColor = GlassCardBorder,
                                 focusedTextColor = TextWhite,
                                 unfocusedTextColor = TextWhite
                             ),
-                            placeholder = { Text("Warrior Name", color = TextGray) },
+                            placeholder = { Text("Suraj Rai", color = TextGray) },
                             modifier = Modifier.fillMaxWidth()
                         )
 
