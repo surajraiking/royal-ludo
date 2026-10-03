@@ -14,6 +14,7 @@ data class FirebaseUserProfile(
     val unlockedThemes: List<String> = listOf("theme_royal"),
     val selectedDiceSkin: String = "skin_default",
     val selectedTheme: String = "theme_royal",
+    val lastScreenState: String = "lobby",
     val createdAt: Timestamp? = null,
     val updatedAt: Timestamp? = null
 )

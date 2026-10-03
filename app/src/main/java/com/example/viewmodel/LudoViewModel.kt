@@ -57,6 +57,7 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
     val gameStateManager = GameStateManager()
 
     // Game core states
+    var lastScreenState by mutableStateOf("lobby")
     var gameState by mutableStateOf(GameState.IDLE)
         private set
     var lobbyMode by mutableStateOf(PlayerType.LOCAL_HUMAN) // LOCAL_HUMAN / AI_MEDIUM / ONLINE_SIMULATED
@@ -304,6 +305,10 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                             prefs.gems = profile.gems
                             prefs.matchesPlayed = profile.matchesPlayed
                             prefs.matchesWon = profile.matchesWon
+
+                            if (profile.lastScreenState.isNotBlank()) {
+                                lastScreenState = profile.lastScreenState
+                            }
                         }
                         isCloudSyncing = false
                     }
@@ -316,6 +321,17 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
                         _leaderboardUsers.value = users
                     }
             }
+        }
+    }
+
+    fun updateScreenState(screen: String) {
+        lastScreenState = screen
+        viewModelScope.launch {
+            try {
+                if (Firebase.auth.currentUser != null) {
+                    firebaseRepo.updateLastScreenState(screen)
+                }
+            } catch (e: Exception) { }
         }
     }
 

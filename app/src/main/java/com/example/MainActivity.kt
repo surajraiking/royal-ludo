@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -61,6 +62,19 @@ class MainActivity : ComponentActivity() {
                         // Set up modern Compose Navigation Controller
                         val navController = rememberNavController()
 
+                        DisposableEffect(navController) {
+                            val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+                                val route = destination.route
+                                if (route != null && route != "splash") {
+                                    ludoViewModel.updateScreenState(route)
+                                }
+                            }
+                            navController.addOnDestinationChangedListener(listener)
+                            onDispose {
+                                navController.removeOnDestinationChangedListener(listener)
+                            }
+                        }
+
                         NavHost(
                             navController = navController,
                             startDestination = "splash"
@@ -68,7 +82,14 @@ class MainActivity : ComponentActivity() {
                             composable("splash") {
                                 SplashScreen(
                                     onNavigateToLobby = {
-                                        navController.navigate("lobby") {
+                                        val targetRoute = when (ludoViewModel.lastScreenState) {
+                                            "game" -> if (ludoViewModel.players.isNotEmpty()) "game" else "lobby"
+                                            "spin_wheel" -> "spin_wheel"
+                                            "leaderboard" -> "leaderboard"
+                                            "store" -> "store"
+                                            else -> "lobby"
+                                        }
+                                        navController.navigate(targetRoute) {
                                             popUpTo("splash") { inclusive = true }
                                         }
                                     }

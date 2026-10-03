@@ -24,6 +24,7 @@ service cloud.firestore {
              (!('unlockedThemes' in data) || data.unlockedThemes is list) &&
              (!('selectedDiceSkin' in data) || data.selectedDiceSkin is string) &&
              (!('selectedTheme' in data) || data.selectedTheme is string) &&
+             (!('lastScreenState' in data) || data.lastScreenState is string) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }

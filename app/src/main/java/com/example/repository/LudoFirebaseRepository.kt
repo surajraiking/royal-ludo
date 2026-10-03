@@ -102,6 +102,7 @@ class LudoFirebaseRepository(private val context: Context) {
                 "unlockedThemes" to listOf("theme_royal"),
                 "selectedDiceSkin" to "skin_default",
                 "selectedTheme" to "theme_royal",
+                "lastScreenState" to "lobby",
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -112,6 +113,36 @@ class LudoFirebaseRepository(private val context: Context) {
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
+        }
+    }
+
+    // Persist user's last screen position / session state in Firestore
+    suspend fun updateLastScreenState(screenState: String) {
+        val uid = currentUserId ?: return
+        try {
+            db.collection("users").document(uid).update(
+                mapOf(
+                    "lastScreenState" to screenState,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: Exception) {
+            // Non-fatal background sync
+        }
+    }
+
+    // Fetch user profile once (for fast restore on launch / login)
+    suspend fun fetchUserProfile(): FirebaseUserProfile? {
+        val uid = currentUserId ?: return null
+        return try {
+            val snapshot = db.collection("users").document(uid).get().await()
+            if (snapshot.exists()) {
+                snapshot.toObject(FirebaseUserProfile::class.java)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
