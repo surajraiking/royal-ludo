@@ -1,19 +1,12 @@
 package com.example.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,22 +20,27 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.model.*
-import com.example.ui.theme.*
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 
+// Classic Authentic Ludo Colors (matching official traditional board exactly)
+private val BoardRed = Color(0xFFE52521)
+private val BoardGreen = Color(0xFF00A859)
+private val BoardYellow = Color(0xFFFFC20E)
+private val BoardBlue = Color(0xFF0080FF)
+private val CellBorderColor = Color(0xFFD4D4D4)
+private val StarOutlineColor = Color(0xFF888888)
+
 /**
- * Premium 3D Ludo Board Component featuring:
- * - 3D Chess Pawn / Royal Knight style pieces with metallic gradients, pedestals, and specular highlights
- * - 3D parabolic hop movements during stepping and base deployment
- * - Extruded 3D text marquee in the central victory playing area
- * - Beveled 3D sunken tiles, raised platforms, and glowing circuit tracks
+ * Authentic Classic Ludo Board Component matching traditional Ludo King format:
+ * - 15x15 crisp white grid with 4 solid colored corner yards
+ * - Inner white courtyards with 4 circular token sockets per player
+ * - 4 center victory triangles meeting at the center point (Red, Green, Yellow, Blue)
+ * - Authentic teardrop / pin goti tokens with silver metallic rim, colored dome, and 3D drop shadow
+ * - 8 safe zone stars (⭐) and directional entry arrows
  */
 @Composable
 fun LudoBoardGridComponent(
@@ -53,16 +51,16 @@ fun LudoBoardGridComponent(
     modifier: Modifier = Modifier,
     movingTokenId: Int? = null,
     movingTokenColor: PlayerColor? = null,
-    center3DText: String = "ROYAL 3D LUDO",
+    center3DText: String = "ROYAL LUDO",
     boardGrid: LudoBoardGrid = remember { LudoBoardGrid() }
 ) {
-    // Pulse animation for movable token highlight & 3D levitation bobbing
-    val infiniteTransition = rememberInfiniteTransition(label = "token_3d_pulse")
+    // Pulse animation for movable tokens
+    val infiniteTransition = rememberInfiniteTransition(label = "token_pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
-        targetValue = 1.22f,
+        targetValue = 1.18f,
         animationSpec = infiniteRepeatable(
-            animation = tween(700, easing = FastOutSlowInEasing),
+            animation = tween(650, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scale"
@@ -71,16 +69,16 @@ fun LudoBoardGridComponent(
         initialValue = 0.35f,
         targetValue = 0.95f,
         animationSpec = infiniteRepeatable(
-            animation = tween(700, easing = FastOutSlowInEasing),
+            animation = tween(650, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
     )
     val bobbingOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = -8f,
+        targetValue = -6f,
         animationSpec = infiniteRepeatable(
-            animation = tween(700, easing = FastOutSlowInEasing),
+            animation = tween(650, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "bobbing"
@@ -90,22 +88,20 @@ fun LudoBoardGridComponent(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .shadow(24.dp, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0xFF1E1528), DeepDarkBg, Color(0xFF07040B))
-                )
-            )
-            .border(2.5.dp, Brush.linearGradient(listOf(GoldPrimary, Color(0xFF5D481C), GoldPrimary)), RoundedCornerShape(20.dp)),
+            .shadow(16.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .border(2.dp, CellBorderColor, RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.Center
     ) {
         val boardSideDp = min(maxWidth.value, maxHeight.value).dp
         val boardSidePx = with(LocalDensity.current) { boardSideDp.toPx() }
         val cellSizePx = boardSidePx / 15f
 
-        // Freshly computed token groupings by grid coordinates (NO stale remember)
-        val tokenClusters = tokens.groupBy { getTokenGridPosition(it) }
+        // Separate yard tokens and track tokens
+        val yardTokens = tokens.filter { it.state == TokenState.YARD }
+        val trackTokens = tokens.filter { it.state != TokenState.YARD }
+        val trackClusters = trackTokens.groupBy { getTokenGridPosition(it) }
 
         Canvas(
             modifier = Modifier
@@ -134,14 +130,18 @@ fun LudoBoardGridComponent(
                             }
                         }
 
-                        // 2. Check distance to each movable token on the board with generous touch target
+                        // 2. Check distance to each movable token on the board
                         var bestToken: LudoToken? = null
                         var bestDistSq = Float.MAX_VALUE
-                        val maxRadiusPx = cellSizePx * 2.2f // Generous touch target: over 2 cells radius!
+                        val maxRadiusPx = cellSizePx * 2.2f
 
                         for (cand in currentMovableTokens) {
-                            val pos = getTokenGridPosition(cand)
-                            val candCenterPx = Offset((pos.second + 0.5f) * cellSizePx, (pos.first + 0.5f) * cellSizePx)
+                            val candCenterPx = if (cand.state == TokenState.YARD) {
+                                getYardSocketCenter(cand.color, cand.id, cellSizePx)
+                            } else {
+                                val pos = getTokenGridPosition(cand)
+                                Offset((pos.second + 0.5f) * cellSizePx, (pos.first + 0.5f) * cellSizePx)
+                            }
                             val distSq = (tapOffset.x - candCenterPx.x) * (tapOffset.x - candCenterPx.x) +
                                          (tapOffset.y - candCenterPx.y) * (tapOffset.y - candCenterPx.y)
                             if (distSq < bestDistSq && distSq <= maxRadiusPx * maxRadiusPx) {
@@ -153,33 +153,50 @@ fun LudoBoardGridComponent(
                         if (bestToken != null) {
                             onTokenClicked(bestToken)
                         } else if (currentMovableTokens.size == 1) {
-                            // If only 1 token is movable and user tapped on the board, execute that move
                             onTokenClicked(currentMovableTokens.first())
                         }
                     }
                 }
         ) {
-            // 1. Draw 3D Board Surface with metallic chiseled bevel border
-            draw3DBoardFrame(size, cellSizePx)
+            // 1. Draw Board Grid Background (White cells)
+            drawRect(color = Color.White, size = size)
 
-            // 2. Draw 4-Player Corner Bases / Raised Palaces
-            draw3DPlayerBases(cellSizePx, boardGrid)
+            // 2. Draw 4 Corner Yards (Home Bases)
+            drawClassicPlayerYards(cellSizePx)
 
-            // 3. Draw 4-Player Home Stretches and Start Deployment Arrows with 3D depth
-            draw3DHomeStretchesAndStarts(cellSizePx)
+            // 3. Draw Home Stretches and Start Squares
+            drawClassicHomeStretchesAndStarts(cellSizePx)
 
-            // 4. Draw Central 4-Color Victory Goal (Center Triangles with depth)
-            draw3DCenterVictoryGoal(cellSizePx)
+            // 4. Draw Center 4-Color Victory Triangles
+            drawClassicCenterTriangles(cellSizePx)
 
-            // 5. Draw Common Circuit Safe Zone 3D Golden Stars
-            draw3DSafeZoneStars(cellSizePx)
+            // 5. Draw 8 Safe Zone Stars (⭐)
+            drawClassicSafeZoneStars(cellSizePx)
 
-            // 6. Draw 3D Sunken Track Borders & Grooves
-            draw3DGridTrackBorders(cellSizePx)
+            // 6. Draw Track Grid Border Lines & Directional Arrows
+            drawClassicTrackBordersAndArrows(cellSizePx)
 
-            // 7. Draw 3D Chess Pieces with Pedestals, Waist, Collar & Specular Heads
-            tokenClusters.forEach { (coord, tokensInCell) ->
-                val centerPx = Offset(
+            // 7. Draw Tokens in Yard Sockets
+            yardTokens.forEach { token ->
+                val socketCenter = getYardSocketCenter(token.color, token.id, cellSizePx)
+                val isMovable = token.color == currentTurnColor && movableTokenIds.contains(token.id)
+                val isMoving = (movingTokenColor == null || token.color == movingTokenColor) && token.id == movingTokenId
+
+                drawAuthenticLudoToken(
+                    token = token,
+                    center = socketCenter,
+                    cellSize = cellSizePx,
+                    isMovable = isMovable,
+                    isMoving = isMoving,
+                    pulseScale = pulseScale,
+                    pulseHaloAlpha = pulseHaloAlpha,
+                    bobbingY = if (isMovable) bobbingOffset else 0f
+                )
+            }
+
+            // 8. Draw Tokens on Common Track / Home Stretch
+            trackClusters.forEach { (coord, tokensInCell) ->
+                val cellCenterPx = Offset(
                     (coord.second + 0.5f) * cellSizePx,
                     (coord.first + 0.5f) * cellSizePx
                 )
@@ -189,9 +206,9 @@ fun LudoBoardGridComponent(
                     val isMovable = singleToken.color == currentTurnColor && movableTokenIds.contains(singleToken.id)
                     val isMoving = (movingTokenColor == null || singleToken.color == movingTokenColor) && singleToken.id == movingTokenId
 
-                    draw3DChessPiece(
+                    drawAuthenticLudoToken(
                         token = singleToken,
-                        center = centerPx,
+                        center = cellCenterPx,
                         cellSize = cellSizePx,
                         isMovable = isMovable,
                         isMoving = isMoving,
@@ -200,23 +217,23 @@ fun LudoBoardGridComponent(
                         bobbingY = if (isMovable) bobbingOffset else 0f
                     )
                 } else {
-                    // Stacking layout: distribute in miniature constellation around cell center
+                    // Stacking layout: distribute tokens in cluster
                     val count = tokensInCell.size
                     tokensInCell.forEachIndexed { idx, stackedToken ->
                         val angleDeg = (360f / count) * idx
                         val rad = Math.toRadians(angleDeg.toDouble())
                         val offsetDistance = cellSizePx * 0.22f
                         val miniCenter = Offset(
-                            centerPx.x + (offsetDistance * cos(rad)).toFloat(),
-                            centerPx.y + (offsetDistance * sin(rad)).toFloat()
+                            cellCenterPx.x + (offsetDistance * cos(rad)).toFloat(),
+                            cellCenterPx.y + (offsetDistance * sin(rad)).toFloat()
                         )
                         val isMovable = stackedToken.color == currentTurnColor && movableTokenIds.contains(stackedToken.id)
                         val isMoving = (movingTokenColor == null || stackedToken.color == movingTokenColor) && stackedToken.id == movingTokenId
 
-                        draw3DChessPiece(
+                        drawAuthenticLudoToken(
                             token = stackedToken,
                             center = miniCenter,
-                            cellSize = cellSizePx * 0.75f,
+                            cellSize = cellSizePx * 0.82f,
                             isMovable = isMovable,
                             isMoving = isMoving,
                             pulseScale = pulseScale,
@@ -227,373 +244,208 @@ fun LudoBoardGridComponent(
                 }
             }
         }
-
-        // 8. 3D EXTRUDED TEXT MARQUEE IN CENTER PLAYING AREA
-        // Centered inside the 3x3 Victory Hub (col 6..8, row 6..8)
-        val centerBoxSizeDp = (boardSideDp / 15f) * 2.85f
-        Box(
-            modifier = Modifier
-                .size(centerBoxSizeDp)
-                .shadow(12.dp, RoundedCornerShape(12.dp))
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(Color(0xFF281C3C), Color(0xFF110B1E), Color(0xFF05030A))
-                    )
-                )
-                .border(
-                    BorderStroke(
-                        1.5.dp,
-                        Brush.linearGradient(listOf(GoldPrimary, Color(0xFFFFA000), GoldPrimary))
-                    ),
-                    RoundedCornerShape(12.dp)
-                )
-                .padding(4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "👑",
-                    fontSize = (centerBoxSizeDp.value * 0.26f).sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Multi-layered 3D Extruded Text effect
-                Box(contentAlignment = Alignment.Center) {
-                    // 3D Shadow Layers (extrusion depth)
-                    Text(
-                        text = center3DText,
-                        color = Color.Black.copy(alpha = 0.85f),
-                        fontSize = (centerBoxSizeDp.value * 0.12f).coerceIn(8f, 13f).sp,
-                        fontWeight = FontWeight.Black,
-                        textAlign = TextAlign.Center,
-                        lineHeight = (centerBoxSizeDp.value * 0.14f).sp,
-                        modifier = Modifier.offset(x = 2.dp, y = 2.dp)
-                    )
-                    Text(
-                        text = center3DText,
-                        color = Color(0xFF533B05),
-                        fontSize = (centerBoxSizeDp.value * 0.12f).coerceIn(8f, 13f).sp,
-                        fontWeight = FontWeight.Black,
-                        textAlign = TextAlign.Center,
-                        lineHeight = (centerBoxSizeDp.value * 0.14f).sp,
-                        modifier = Modifier.offset(x = 1.dp, y = 1.dp)
-                    )
-                    // Gleaming Golden Front Face
-                    Text(
-                        text = center3DText,
-                        color = GoldPrimary,
-                        fontSize = (centerBoxSizeDp.value * 0.12f).coerceIn(8f, 13f).sp,
-                        fontWeight = FontWeight.Black,
-                        textAlign = TextAlign.Center,
-                        lineHeight = (centerBoxSizeDp.value * 0.14f).sp
-                    )
-                }
-            }
-        }
     }
 }
 
 /**
- * Draws the 3D chiseled board surface frame and corner rivets.
+ * Returns exact pixel center for the 4 circular sockets inside each yard.
  */
-private fun DrawScope.draw3DBoardFrame(size: Size, cellSize: Float) {
-    // Deep obsidian background
-    drawRect(color = DeepDarkBg, size = size)
-
-    // Outer chiseled bevel border
-    drawRect(
-        brush = Brush.linearGradient(
-            colors = listOf(Color(0xFF3B2E15), Color(0xFF1E170B), Color(0xFF4C3B1A)),
-            start = Offset.Zero,
-            end = Offset(size.width, size.height)
-        ),
-        topLeft = Offset.Zero,
-        size = size,
-        style = Stroke(width = cellSize * 0.15f)
+private fun getYardSocketCenter(color: PlayerColor, id: Int, cellSize: Float): Offset {
+    val offsets = listOf(
+        Pair(1.85f, 1.85f),
+        Pair(4.15f, 1.85f),
+        Pair(1.85f, 4.15f),
+        Pair(4.15f, 4.15f)
     )
+    val (relC, relR) = offsets[id.coerceIn(0, 3)]
 
-    // Golden metallic corner accents
-    val rivetRadius = cellSize * 0.12f
-    val margin = cellSize * 0.25f
-    val rivets = listOf(
-        Offset(margin, margin),
-        Offset(size.width - margin, margin),
-        Offset(margin, size.height - margin),
-        Offset(size.width - margin, size.height - margin)
-    )
-    rivets.forEach { rivet ->
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color.White, GoldPrimary, Color(0xFF6B5218)),
-                center = rivet - Offset(rivetRadius * 0.3f, rivetRadius * 0.3f),
-                radius = rivetRadius
-            ),
-            radius = rivetRadius,
-            center = rivet
-        )
+    val baseTopLeft = when (color) {
+        PlayerColor.RED -> Offset(0f, 0f)
+        PlayerColor.GREEN -> Offset(9f * cellSize, 0f)
+        PlayerColor.YELLOW -> Offset(9f * cellSize, 9f * cellSize)
+        PlayerColor.BLUE -> Offset(0f, 9f * cellSize)
     }
+
+    return Offset(baseTopLeft.x + relC * cellSize, baseTopLeft.y + relR * cellSize)
 }
 
 /**
- * Draws the four 6x6 raised 3D palace bases for Red, Green, Yellow, and Blue.
+ * Draws the 4 authentic player yards (6x6 solid color with rounded white courtyard and 4 sockets).
  */
-private fun DrawScope.draw3DPlayerBases(cellSize: Float, grid: LudoBoardGrid) {
-    val baseConfigs = listOf(
-        Triple(grid.redBase, LudoRed, Color(0xFF700018)),
-        Triple(grid.greenBase, LudoGreen, Color(0xFF004D40)),
-        Triple(grid.yellowBase, LudoYellow, Color(0xFF8C7100)),
-        Triple(grid.blueBase, LudoBlueVibrant, Color(0xFF094183))
+private fun DrawScope.drawClassicPlayerYards(cellSize: Float) {
+    val yards = listOf(
+        Triple(Offset(0f, 0f), BoardRed, PlayerColor.RED),
+        Triple(Offset(9f * cellSize, 0f), BoardGreen, PlayerColor.GREEN),
+        Triple(Offset(9f * cellSize, 9f * cellSize), BoardYellow, PlayerColor.YELLOW),
+        Triple(Offset(0f, 9f * cellSize), BoardBlue, PlayerColor.BLUE)
     )
 
-    baseConfigs.forEach { (base, primaryColor, darkColor) ->
-        val topLeftOffset = Offset(base.topLeftCol * cellSize, base.topLeftRow * cellSize)
-        val quadrantSize = cellSize * 6
+    val yardSize = cellSize * 6f
+    val innerPad = cellSize * 0.9f
+    val innerSize = cellSize * 4.2f
+    val cornerRad = CornerRadius(14f, 14f)
 
-        // 3D Cast drop shadow around base perimeter
-        drawRoundRect(
-            color = Color.Black.copy(alpha = 0.5f),
-            topLeft = topLeftOffset + Offset(4f, 4f),
-            size = Size(quadrantSize, quadrantSize),
-            cornerRadius = CornerRadius(14f, 14f)
-        )
+    yards.forEach { (topLeft, color, pColor) ->
+        // 1. Solid Outer 6x6 Yard Square
+        drawRect(color = color, topLeft = topLeft, size = Size(yardSize, yardSize))
 
-        // Raised 3D platform with rich royal gradient
+        // 2. Inner White Courtyard with rounded corners
+        val innerTopLeft = Offset(topLeft.x + innerPad, topLeft.y + innerPad)
         drawRoundRect(
-            brush = Brush.radialGradient(
-                colors = listOf(primaryColor, darkColor),
-                center = Offset(topLeftOffset.x + quadrantSize / 2f, topLeftOffset.y + quadrantSize / 2f),
-                radius = quadrantSize * 0.85f
-            ),
-            topLeft = topLeftOffset,
-            size = Size(quadrantSize, quadrantSize),
-            cornerRadius = CornerRadius(12f, 12f)
-        )
-
-        // 3D Top Bevel light highlight line
-        drawRoundRect(
-            brush = Brush.linearGradient(
-                colors = listOf(Color.White.copy(alpha = 0.45f), Color.Transparent),
-                start = topLeftOffset,
-                end = Offset(topLeftOffset.x + quadrantSize, topLeftOffset.y + quadrantSize * 0.3f)
-            ),
-            topLeft = topLeftOffset,
-            size = Size(quadrantSize, quadrantSize),
-            cornerRadius = CornerRadius(12f, 12f),
-            style = Stroke(width = 3f)
-        )
-
-        // Inner palace courtyard card
-        val innerPad = cellSize * 0.75f
-        val innerSize = cellSize * 4.5f
-        drawRoundRect(
-            color = Color.Black.copy(alpha = 0.45f),
-            topLeft = Offset(topLeftOffset.x + innerPad, topLeftOffset.y + innerPad),
+            color = Color.White,
+            topLeft = innerTopLeft,
             size = Size(innerSize, innerSize),
-            cornerRadius = CornerRadius(14f, 14f)
+            cornerRadius = cornerRad
         )
+        // Subtle crisp border around inner courtyard
         drawRoundRect(
-            brush = Brush.linearGradient(
-                colors = listOf(GlassCard, Color(0x33100B1A))
-            ),
-            topLeft = Offset(topLeftOffset.x + innerPad, topLeftOffset.y + innerPad),
+            color = CellBorderColor,
+            topLeft = innerTopLeft,
             size = Size(innerSize, innerSize),
-            cornerRadius = CornerRadius(14f, 14f)
+            cornerRadius = cornerRad,
+            style = Stroke(width = 1.5f)
         )
 
-        // 4 Token spawn docks with 3D sunken well effect
-        base.yardSlots.forEach { (r, c) ->
-            val slotCenter = Offset((c + 0.5f) * cellSize, (r + 0.5f) * cellSize)
-            val dockRadius = cellSize * 0.34f
+        // 3. Four Circular Sockets with colored border & circular well
+        val socketRadius = cellSize * 0.45f
+        val innerWellRadius = cellSize * 0.35f
 
-            // 3D sunken well shadow
+        for (slotId in 0..3) {
+            val center = getYardSocketCenter(pColor, slotId, cellSize)
+
+            // Outer colored concentric ring
             drawCircle(
-                color = Color.Black.copy(alpha = 0.75f),
-                radius = dockRadius,
-                center = slotCenter + Offset(2f, 2f)
-            )
-            // Outer golden glow ring
-            drawCircle(
-                color = primaryColor,
-                radius = dockRadius,
-                center = slotCenter,
+                color = color,
+                radius = socketRadius,
+                center = center,
                 style = Stroke(width = 3.5f)
             )
-            // Inner dock pad with metallic finish
+
+            // Inner colored solid well
             drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF282035), Color(0xFF0F0B17)),
-                    center = slotCenter,
-                    radius = dockRadius
-                ),
-                radius = dockRadius - 2f,
-                center = slotCenter
+                color = color,
+                radius = innerWellRadius,
+                center = center
+            )
+
+            // Subtle dark inner bevel ring
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.18f),
+                radius = innerWellRadius,
+                center = center,
+                style = Stroke(width = 2f)
             )
         }
     }
 }
 
 /**
- * Draws colored home runways and starting deployment tiles with 3D lighting.
+ * Draws colored home runways and starting deployment tiles matching classic Ludo.
  */
-private fun DrawScope.draw3DHomeStretchesAndStarts(cellSize: Float) {
-    // Red Home Runway: Row 7, Col 1..5
+private fun DrawScope.drawClassicHomeStretchesAndStarts(cellSize: Float) {
+    // Red Home Runway: Row 7, Cols 1..5
     for (col in 1..5) {
-        val rectTopLeft = Offset(col * cellSize, 7 * cellSize)
-        draw3DTile(rectTopLeft, cellSize, LudoRed)
+        drawRect(color = BoardRed, topLeft = Offset(col * cellSize, 7 * cellSize), size = Size(cellSize, cellSize))
     }
-    // Green Home Runway: Col 7, Row 1..5
+    // Green Home Runway: Col 7, Rows 1..5
     for (row in 1..5) {
-        val rectTopLeft = Offset(7 * cellSize, row * cellSize)
-        draw3DTile(rectTopLeft, cellSize, LudoGreen)
+        drawRect(color = BoardGreen, topLeft = Offset(7 * cellSize, row * cellSize), size = Size(cellSize, cellSize))
     }
-    // Yellow Home Runway: Row 7, Col 9..13
+    // Yellow Home Runway: Row 7, Cols 9..13
     for (col in 9..13) {
-        val rectTopLeft = Offset(col * cellSize, 7 * cellSize)
-        draw3DTile(rectTopLeft, cellSize, LudoYellow)
+        drawRect(color = BoardYellow, topLeft = Offset(col * cellSize, 7 * cellSize), size = Size(cellSize, cellSize))
     }
-    // Blue Home Runway: Col 7, Row 9..13
+    // Blue Home Runway: Col 7, Rows 9..13
     for (row in 9..13) {
-        val rectTopLeft = Offset(7 * cellSize, row * cellSize)
-        draw3DTile(rectTopLeft, cellSize, LudoBlueVibrant)
+        drawRect(color = BoardBlue, topLeft = Offset(7 * cellSize, row * cellSize), size = Size(cellSize, cellSize))
     }
 
-    // Start Cells (where tokens spawn onto the board with 3D embossed border)
-    val startCells = listOf(
-        Pair(Offset(1 * cellSize, 6 * cellSize), LudoRed),
-        Pair(Offset(8 * cellSize, 1 * cellSize), LudoGreen),
-        Pair(Offset(13 * cellSize, 8 * cellSize), LudoYellow),
-        Pair(Offset(6 * cellSize, 13 * cellSize), LudoBlueVibrant)
-    )
-
-    startCells.forEach { (offset, col) ->
-        draw3DTile(offset, cellSize, col, isStartCell = true)
-    }
+    // Start Cells (where tokens enter the common running track)
+    // Red Start: Row 6, Col 1
+    drawRect(color = BoardRed, topLeft = Offset(1 * cellSize, 6 * cellSize), size = Size(cellSize, cellSize))
+    // Green Start: Row 1, Col 8
+    drawRect(color = BoardGreen, topLeft = Offset(8 * cellSize, 1 * cellSize), size = Size(cellSize, cellSize))
+    // Yellow Start: Row 8, Col 13
+    drawRect(color = BoardYellow, topLeft = Offset(13 * cellSize, 8 * cellSize), size = Size(cellSize, cellSize))
+    // Blue Start: Row 13, Col 6
+    drawRect(color = BoardBlue, topLeft = Offset(6 * cellSize, 13 * cellSize), size = Size(cellSize, cellSize))
 }
 
 /**
- * Draws a 3D bevelled track tile.
+ * Draws the authentic 3x3 central victory area with 4 colored triangles meeting at the exact center.
  */
-private fun DrawScope.draw3DTile(topLeft: Offset, cellSize: Float, color: Color, isStartCell: Boolean = false) {
-    val size = Size(cellSize, cellSize)
-    // 3D sunken tile background
-    drawRect(
-        brush = Brush.radialGradient(
-            colors = listOf(color.copy(alpha = 0.85f), color.copy(alpha = 0.5f)),
-            center = Offset(topLeft.x + cellSize / 2f, topLeft.y + cellSize / 2f),
-            radius = cellSize * 0.7f
-        ),
-        topLeft = topLeft,
-        size = size
-    )
-    // Top-left highlight
-    drawLine(
-        color = Color.White.copy(alpha = 0.4f),
-        start = topLeft,
-        end = Offset(topLeft.x + cellSize, topLeft.y),
-        strokeWidth = 2f
-    )
-    drawLine(
-        color = Color.White.copy(alpha = 0.4f),
-        start = topLeft,
-        end = Offset(topLeft.x, topLeft.y + cellSize),
-        strokeWidth = 2f
-    )
-    // Bottom-right shadow
-    drawLine(
-        color = Color.Black.copy(alpha = 0.6f),
-        start = Offset(topLeft.x, topLeft.y + cellSize),
-        end = Offset(topLeft.x + cellSize, topLeft.y + cellSize),
-        strokeWidth = 2.5f
-    )
-    drawLine(
-        color = Color.Black.copy(alpha = 0.6f),
-        start = Offset(topLeft.x + cellSize, topLeft.y),
-        end = Offset(topLeft.x + cellSize, topLeft.y + cellSize),
-        strokeWidth = 2.5f
-    )
-
-    if (isStartCell) {
-        // Start Arrow / Emblem indicator
-        drawCircle(
-            color = Color.White.copy(alpha = 0.8f),
-            radius = cellSize * 0.15f,
-            center = Offset(topLeft.x + cellSize / 2f, topLeft.y + cellSize / 2f)
-        )
-    }
-}
-
-/**
- * Draws the 3x3 central victory triangle where all four colors meet with 3D depth.
- */
-private fun DrawScope.draw3DCenterVictoryGoal(cellSize: Float) {
+private fun DrawScope.drawClassicCenterTriangles(cellSize: Float) {
     val centerTopLeft = Offset(6 * cellSize, 6 * cellSize)
     val centerSide = cellSize * 3
+    val midPoint = Offset(centerTopLeft.x + centerSide / 2f, centerTopLeft.y + centerSide / 2f)
 
+    // Red Left Triangle
     val pathRed = Path().apply {
         moveTo(centerTopLeft.x, centerTopLeft.y)
-        lineTo(centerTopLeft.x + centerSide / 2f, centerTopLeft.y + centerSide / 2f)
+        lineTo(midPoint.x, midPoint.y)
         lineTo(centerTopLeft.x, centerTopLeft.y + centerSide)
         close()
     }
+    // Green Top Triangle
     val pathGreen = Path().apply {
         moveTo(centerTopLeft.x, centerTopLeft.y)
-        lineTo(centerTopLeft.x + centerSide / 2f, centerTopLeft.y + centerSide / 2f)
+        lineTo(midPoint.x, midPoint.y)
         lineTo(centerTopLeft.x + centerSide, centerTopLeft.y)
         close()
     }
+    // Yellow Right Triangle
     val pathYellow = Path().apply {
         moveTo(centerTopLeft.x + centerSide, centerTopLeft.y)
-        lineTo(centerTopLeft.x + centerSide / 2f, centerTopLeft.y + centerSide / 2f)
+        lineTo(midPoint.x, midPoint.y)
         lineTo(centerTopLeft.x + centerSide, centerTopLeft.y + centerSide)
         close()
     }
+    // Blue Bottom Triangle
     val pathBlue = Path().apply {
         moveTo(centerTopLeft.x, centerTopLeft.y + centerSide)
-        lineTo(centerTopLeft.x + centerSide / 2f, centerTopLeft.y + centerSide / 2f)
+        lineTo(midPoint.x, midPoint.y)
         lineTo(centerTopLeft.x + centerSide, centerTopLeft.y + centerSide)
         close()
     }
 
-    drawPath(path = pathRed, color = LudoRed.copy(alpha = 0.9f))
-    drawPath(path = pathGreen, color = LudoGreen.copy(alpha = 0.9f))
-    drawPath(path = pathYellow, color = LudoYellow.copy(alpha = 0.9f))
-    drawPath(path = pathBlue, color = LudoBlueVibrant.copy(alpha = 0.9f))
+    drawPath(path = pathRed, color = BoardRed)
+    drawPath(path = pathGreen, color = BoardGreen)
+    drawPath(path = pathYellow, color = BoardYellow)
+    drawPath(path = pathBlue, color = BoardBlue)
 
-    // 3D Golden Victory Ring
-    drawCircle(
-        color = GoldPrimary,
-        radius = cellSize * 0.5f,
-        center = Offset(7.5f * cellSize, 7.5f * cellSize),
-        style = Stroke(width = 5f)
-    )
+    // Dividing lines between center triangles
+    drawLine(color = CellBorderColor, start = Offset(centerTopLeft.x, centerTopLeft.y), end = Offset(centerTopLeft.x + centerSide, centerTopLeft.y + centerSide), strokeWidth = 1.5f)
+    drawLine(color = CellBorderColor, start = Offset(centerTopLeft.x + centerSide, centerTopLeft.y), end = Offset(centerTopLeft.x, centerTopLeft.y + centerSide), strokeWidth = 1.5f)
 }
 
 /**
- * Draws the 3D star safe zone markers where tokens cannot be captured.
+ * Draws the 8 authentic safe zone stars (⭐).
  */
-private fun DrawScope.draw3DSafeZoneStars(cellSize: Float) {
+private fun DrawScope.drawClassicSafeZoneStars(cellSize: Float) {
     val starCoords = listOf(
-        Pair(6, 2), Pair(8, 2),    // Red / Blue side stars
-        Pair(2, 6), Pair(2, 8),    // Red / Green top stars
-        Pair(6, 12), Pair(8, 12),  // Green / Yellow side stars
-        Pair(12, 6), Pair(12, 8)   // Blue / Yellow bottom stars
+        Pair(6, 1),  // Red Start (Row 6, Col 1)
+        Pair(8, 2),  // Red Track Safe Spot (Row 8, Col 2)
+        Pair(1, 8),  // Green Start (Row 1, Col 8)
+        Pair(2, 6),  // Green Track Safe Spot (Row 2, Col 6)
+        Pair(8, 13), // Yellow Start (Row 8, Col 13)
+        Pair(6, 12), // Yellow Track Safe Spot (Row 6, Col 12)
+        Pair(13, 6), // Blue Start (Row 13, Col 6)
+        Pair(12, 8)  // Blue Track Safe Spot (Row 12, Col 8)
     )
 
     starCoords.forEach { (r, c) ->
         val cX = (c + 0.5f) * cellSize
         val cY = (r + 0.5f) * cellSize
-        // 3D Drop shadow for star
-        draw3DStarPath(cX + 2f, cY + 2f, cellSize * 0.22f, Color.Black.copy(alpha = 0.7f))
-        // Foreground 3D Golden Star
-        draw3DStarPath(cX, cY, cellSize * 0.22f, GoldPrimary)
+
+        // In starts (colored squares), draw white outline star; in white track cells, draw dark gray outline star
+        val isColoredTile = (r == 6 && c == 1) || (r == 1 && c == 8) || (r == 8 && c == 13) || (r == 13 && c == 6)
+        val starColor = if (isColoredTile) Color.White else StarOutlineColor
+
+        drawOutlinedStar(cX, cY, cellSize * 0.28f, starColor)
     }
 }
 
-private fun DrawScope.draw3DStarPath(cX: Float, cY: Float, r: Float, starColor: Color) {
+private fun DrawScope.drawOutlinedStar(cX: Float, cY: Float, r: Float, color: Color) {
     val path = Path()
     val points = 5
     var angle = -90.0
@@ -605,56 +457,98 @@ private fun DrawScope.draw3DStarPath(cX: Float, cY: Float, r: Float, starColor: 
         val oY = cY + r * sin(radOuter).toFloat()
         if (i == 0) path.moveTo(oX, oY) else path.lineTo(oX, oY)
 
-        val iX = cX + (r / 2.2f) * cos(radInner).toFloat()
-        val iY = cY + (r / 2.2f) * sin(radInner).toFloat()
+        val iX = cX + (r / 2.3f) * cos(radInner).toFloat()
+        val iY = cY + (r / 2.3f) * sin(radInner).toFloat()
         path.lineTo(iX, iY)
         angle += angleInc
     }
     path.close()
-    drawPath(path = path, color = starColor)
+    drawPath(path = path, color = color, style = Stroke(width = 2f))
 }
 
 /**
- * Draws delicate grid lines with 3D chiseled groove styling.
+ * Draws fine grid lines and directional track entry arrows.
  */
-private fun DrawScope.draw3DGridTrackBorders(cellSize: Float) {
+private fun DrawScope.drawClassicTrackBordersAndArrows(cellSize: Float) {
+    // 1. Grid Lines around tracks
     for (row in 6..9) {
-        drawLine(color = Color.Black.copy(alpha = 0.5f), start = Offset(0f, row * cellSize + 1f), end = Offset(15 * cellSize, row * cellSize + 1f), strokeWidth = 2.5f)
-        drawLine(color = GlassCardBorder, start = Offset(0f, row * cellSize), end = Offset(15 * cellSize, row * cellSize), strokeWidth = 1.5f)
+        drawLine(color = CellBorderColor, start = Offset(0f, row * cellSize), end = Offset(15 * cellSize, row * cellSize), strokeWidth = 1.2f)
     }
     for (col in 6..9) {
-        drawLine(color = Color.Black.copy(alpha = 0.5f), start = Offset(col * cellSize + 1f, 0f), end = Offset(col * cellSize + 1f, 15 * cellSize), strokeWidth = 2.5f)
-        drawLine(color = GlassCardBorder, start = Offset(col * cellSize, 0f), end = Offset(col * cellSize, 15 * cellSize), strokeWidth = 1.5f)
+        drawLine(color = CellBorderColor, start = Offset(col * cellSize, 0f), end = Offset(col * cellSize, 15 * cellSize), strokeWidth = 1.2f)
     }
 
     for (row in 0..14) {
         if (row in 6..8) {
             for (col in 0..14) {
-                drawLine(color = GlassCardBorder.copy(alpha = 0.6f), start = Offset(col * cellSize, row * cellSize), end = Offset(col * cellSize, (row + 1) * cellSize), strokeWidth = 1.2f)
+                drawLine(color = CellBorderColor, start = Offset(col * cellSize, row * cellSize), end = Offset(col * cellSize, (row + 1) * cellSize), strokeWidth = 1.2f)
             }
         } else {
             for (col in 6..8) {
-                drawLine(color = GlassCardBorder.copy(alpha = 0.6f), start = Offset(col * cellSize, row * cellSize), end = Offset((col + 1) * cellSize, row * cellSize), strokeWidth = 1.2f)
-                drawLine(color = GlassCardBorder.copy(alpha = 0.6f), start = Offset(col * cellSize, row * cellSize), end = Offset(col * cellSize, (row + 1) * cellSize), strokeWidth = 1.2f)
-                drawLine(color = GlassCardBorder.copy(alpha = 0.6f), start = Offset((col + 1) * cellSize, row * cellSize), end = Offset((col + 1) * cellSize, (row + 1) * cellSize), strokeWidth = 1.2f)
+                drawLine(color = CellBorderColor, start = Offset(col * cellSize, row * cellSize), end = Offset((col + 1) * cellSize, row * cellSize), strokeWidth = 1.2f)
+                drawLine(color = CellBorderColor, start = Offset(col * cellSize, row * cellSize), end = Offset(col * cellSize, (row + 1) * cellSize), strokeWidth = 1.2f)
+                drawLine(color = CellBorderColor, start = Offset((col + 1) * cellSize, row * cellSize), end = Offset((col + 1) * cellSize, (row + 1) * cellSize), strokeWidth = 1.2f)
             }
         }
     }
+
+    // 2. Directional Entry Arrows
+    // Red Arrow pointing right at (row 7, col 0)
+    drawDirectionalArrow(center = Offset(0.5f * cellSize, 7.5f * cellSize), radius = cellSize * 0.22f, direction = ArrowDirection.RIGHT, color = BoardRed)
+    // Green Arrow pointing down at (row 0, col 7)
+    drawDirectionalArrow(center = Offset(7.5f * cellSize, 0.5f * cellSize), radius = cellSize * 0.22f, direction = ArrowDirection.DOWN, color = BoardGreen)
+    // Yellow Arrow pointing left at (row 7, col 14)
+    drawDirectionalArrow(center = Offset(14.5f * cellSize, 7.5f * cellSize), radius = cellSize * 0.22f, direction = ArrowDirection.LEFT, color = BoardYellow)
+    // Blue Arrow pointing up at (row 14, col 7)
+    drawDirectionalArrow(center = Offset(7.5f * cellSize, 14.5f * cellSize), radius = cellSize * 0.22f, direction = ArrowDirection.UP, color = BoardBlue)
+}
+
+private enum class ArrowDirection { UP, DOWN, LEFT, RIGHT }
+
+private fun DrawScope.drawDirectionalArrow(center: Offset, radius: Float, direction: ArrowDirection, color: Color) {
+    val path = Path()
+    when (direction) {
+        ArrowDirection.RIGHT -> {
+            path.moveTo(center.x - radius, center.y - radius * 0.6f)
+            path.lineTo(center.x + radius, center.y)
+            path.lineTo(center.x - radius, center.y + radius * 0.6f)
+            path.lineTo(center.x - radius * 0.3f, center.y)
+            path.close()
+        }
+        ArrowDirection.DOWN -> {
+            path.moveTo(center.x - radius * 0.6f, center.y - radius)
+            path.lineTo(center.x, center.y + radius)
+            path.lineTo(center.x + radius * 0.6f, center.y - radius)
+            path.lineTo(center.x, center.y - radius * 0.3f)
+            path.close()
+        }
+        ArrowDirection.LEFT -> {
+            path.moveTo(center.x + radius, center.y - radius * 0.6f)
+            path.lineTo(center.x - radius, center.y)
+            path.lineTo(center.x + radius, center.y + radius * 0.6f)
+            path.lineTo(center.x + radius * 0.3f, center.y)
+            path.close()
+        }
+        ArrowDirection.UP -> {
+            path.moveTo(center.x - radius * 0.6f, center.y + radius)
+            path.lineTo(center.x, center.y - radius)
+            path.lineTo(center.x + radius * 0.6f, center.y + radius)
+            path.lineTo(center.x, center.y + radius * 0.3f)
+            path.close()
+        }
+    }
+    drawPath(path = path, color = color)
 }
 
 /**
- * Draws an authentic 3D CHESS PIECE (Staunton-style Royal Pawn / Knight Finial).
- * 
- * Features:
- * 1. Board Drop Shadow: Cast onto board tile, enlarges & detaches when hopping/moving in 3D
- * 2. Stepped Pedestal Base: Multi-tiered rounded base with specular highlight
- * 3. Graceful Tapered Waist (Body): Curving stem with 3D cylindrical lighting & reflection streak
- * 4. Collar Bead Ring: Golden torus ring around the neck
- * 5. Spherical Head (Finial Ball): 3D sphere with radial gradient and specular glint
- * 6. Royal Crown Crest: Topped with a golden crown finial
- * 7. 3D Hop Animation: Vertical elevation (-Y) and dynamic scale during stepping
+ * Draws the authentic Ludo King Teardrop / Map-Pin Pawn (Goti) matching the user's uploaded image:
+ * - Oval drop shadow on the board
+ * - Silver/White metallic 3D outer rim
+ * - Vibrant colored circular dome in the head
+ * - Tapered conical stem pointing to the tile
+ * - Pulsing highlight aura when movable
  */
-private fun DrawScope.draw3DChessPiece(
+private fun DrawScope.drawAuthenticLudoToken(
     token: LudoToken,
     center: Offset,
     cellSize: Float,
@@ -664,180 +558,112 @@ private fun DrawScope.draw3DChessPiece(
     pulseHaloAlpha: Float,
     bobbingY: Float
 ) {
-    val pieceHeight = cellSize * 0.95f
-    val currentScale = if (isMoving) 1.35f else if (isMovable) pulseScale else 1.0f
+    val pieceColor = when (token.color) {
+        PlayerColor.RED -> BoardRed
+        PlayerColor.GREEN -> BoardGreen
+        PlayerColor.YELLOW -> BoardYellow
+        PlayerColor.BLUE -> BoardBlue
+    }
 
-    // 3D Parabolic Jump Elevation
-    val jumpElevationY = if (isMoving) -pieceHeight * 0.55f else bobbingY
+    val currentScale = if (isMoving) 1.28f else if (isMovable) pulseScale else 1.0f
+    val jumpElevationY = if (isMoving) -cellSize * 0.45f else bobbingY
     val effectiveCenter = center + Offset(0f, jumpElevationY)
 
-    val baseWidth = cellSize * 0.72f * currentScale
-    val baseHeight = cellSize * 0.22f * currentScale
-    val waistWidth = cellSize * 0.28f * currentScale
-    val neckWidth = cellSize * 0.22f * currentScale
-    val headRadius = cellSize * 0.22f * currentScale
+    val pinRadius = cellSize * 0.34f * currentScale
+    val stemLength = cellSize * 0.42f * currentScale
 
-    // 1. BOARD DROP SHADOW (Stays on board plane, grows larger & softer when jumping)
-    val shadowAlpha = if (isMoving) 0.22f else if (isMovable) 0.35f else 0.55f
-    val shadowWidth = if (isMoving) baseWidth * 1.4f else baseWidth * 1.05f
-    val shadowHeight = if (isMoving) baseHeight * 1.5f else baseHeight
-    val shadowCenter = Offset(center.x + 3f, center.y + pieceHeight * 0.28f)
-
+    // 1. Drop shadow onto the board
+    val shadowWidth = pinRadius * 1.8f
+    val shadowHeight = pinRadius * 0.9f
     drawOval(
-        color = Color.Black.copy(alpha = shadowAlpha),
-        topLeft = Offset(shadowCenter.x - shadowWidth / 2f, shadowCenter.y - shadowHeight / 2f),
+        color = Color.Black.copy(alpha = if (isMoving) 0.2f else 0.35f),
+        topLeft = Offset(center.x - shadowWidth / 2f + 2f, center.y + cellSize * 0.15f - shadowHeight / 2f),
         size = Size(shadowWidth, shadowHeight)
     )
 
-    // Movable Golden Aura beacon disc on board tile
+    // 2. Movable Halo Ring
     if (isMovable && pulseHaloAlpha > 0f) {
         drawCircle(
-            color = GoldPrimary.copy(alpha = pulseHaloAlpha * 0.7f),
-            radius = baseWidth * 0.85f,
-            center = center + Offset(0f, pieceHeight * 0.28f),
+            color = pieceColor.copy(alpha = pulseHaloAlpha * 0.65f),
+            radius = pinRadius * 1.6f,
+            center = center,
             style = Stroke(width = 3.5f)
         )
     }
 
-    // 2. STEPPED PEDESTAL BASE (Bottom-most disc)
-    val baseY = effectiveCenter.y + pieceHeight * 0.22f
-    val baseTopLeft = Offset(effectiveCenter.x - baseWidth / 2f, baseY - baseHeight / 2f)
+    // 3. Teardrop / Map-Pin Outer Body (Silver / White metallic rim)
+    val headCenter = effectiveCenter - Offset(0f, stemLength * 0.25f)
+    val tipBottom = effectiveCenter + Offset(0f, stemLength * 0.85f)
 
-    // Dark under-rim of base
-    drawOval(
-        color = Color(0xFF100C16),
-        topLeft = baseTopLeft + Offset(0f, 3f),
-        size = Size(baseWidth, baseHeight)
-    )
-
-    // Base upper platform with radial metallic lighting
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(token.color.color, token.color.color.copy(alpha = 0.75f), Color(0xFF1C1424)),
-            center = Offset(effectiveCenter.x - baseWidth * 0.2f, baseY - baseHeight * 0.2f),
-            radius = baseWidth * 0.7f
-        ),
-        topLeft = baseTopLeft,
-        size = Size(baseWidth, baseHeight)
-    )
-
-    // Golden rim line along base edge
-    drawOval(
-        color = GoldPrimary,
-        topLeft = baseTopLeft,
-        size = Size(baseWidth, baseHeight),
-        style = Stroke(width = 2.5f)
-    )
-
-    // 3. SECOND PEDESTAL TIER (Collar of base)
-    val tier2Width = baseWidth * 0.72f
-    val tier2Height = baseHeight * 0.65f
-    val tier2Y = baseY - baseHeight * 0.45f
-    drawOval(
-        brush = Brush.linearGradient(
-            colors = listOf(Color(0xFFE0C068), GoldPrimary, Color(0xFF7A5816)),
-            start = Offset(effectiveCenter.x - tier2Width / 2f, tier2Y),
-            end = Offset(effectiveCenter.x + tier2Width / 2f, tier2Y)
-        ),
-        topLeft = Offset(effectiveCenter.x - tier2Width / 2f, tier2Y - tier2Height / 2f),
-        size = Size(tier2Width, tier2Height)
-    )
-
-    // 4. CONCAVE TAPERED WAIST (Pawn Trunk Body)
-    val bodyBottomY = tier2Y
-    val bodyTopY = effectiveCenter.y - pieceHeight * 0.16f
-
-    val bodyPath = Path().apply {
-        moveTo(effectiveCenter.x - tier2Width * 0.42f, bodyBottomY)
-        quadraticBezierTo(
-            effectiveCenter.x - waistWidth * 0.35f,
-            (bodyBottomY + bodyTopY) / 2f,
-            effectiveCenter.x - neckWidth / 2f,
-            bodyTopY
+    val pinPath = Path().apply {
+        // Start at left tangent of the head circle
+        moveTo(headCenter.x - pinRadius, headCenter.y)
+        // Top circular arc
+        arcTo(
+            rect = androidx.compose.ui.geometry.Rect(
+                headCenter.x - pinRadius,
+                headCenter.y - pinRadius,
+                headCenter.x + pinRadius,
+                headCenter.y + pinRadius
+            ),
+            startAngleDegrees = 180f,
+            sweepAngleDegrees = 180f,
+            forceMoveTo = false
         )
-        lineTo(effectiveCenter.x + neckWidth / 2f, bodyTopY)
-        quadraticBezierTo(
-            effectiveCenter.x + waistWidth * 0.35f,
-            (bodyBottomY + bodyTopY) / 2f,
-            effectiveCenter.x + tier2Width * 0.42f,
-            bodyBottomY
+        // Right side tapering down to bottom tip
+        quadraticTo(
+            headCenter.x + pinRadius * 0.85f, headCenter.y + stemLength * 0.45f,
+            tipBottom.x, tipBottom.y
+        )
+        // Left side tapering back up to left tangent
+        quadraticTo(
+            headCenter.x - pinRadius * 0.85f, headCenter.y + stemLength * 0.45f,
+            headCenter.x - pinRadius, headCenter.y
         )
         close()
     }
 
-    // Cylindrical 3D lighting gradient: dark on right, jewel in center, specular highlight on left
+    // Fill outer body with silver / metallic 3D gradient
     drawPath(
-        path = bodyPath,
+        path = pinPath,
         brush = Brush.linearGradient(
-            0.0f to Color.White.copy(alpha = 0.6f),
-            0.25f to token.color.color,
-            0.7f to token.color.color.copy(alpha = 0.85f),
-            1.0f to Color(0xFF150E1E),
-            start = Offset(effectiveCenter.x - baseWidth / 2f, 0f),
-            end = Offset(effectiveCenter.x + baseWidth / 2f, 0f)
+            colors = listOf(Color(0xFFFFFFFF), Color(0xFFECEFF1), Color(0xFFCFD8DC), Color(0xFF90A4AE)),
+            start = Offset(headCenter.x - pinRadius, headCenter.y - pinRadius),
+            end = Offset(tipBottom.x + pinRadius, tipBottom.y)
         )
     )
 
-    // 5. NECK COLLAR BEAD RING
-    val collarWidth = neckWidth * 1.3f
-    val collarHeight = baseHeight * 0.55f
-    drawOval(
-        brush = Brush.linearGradient(
-            colors = listOf(Color.White, GoldPrimary, Color(0xFF6E5014)),
-            start = Offset(effectiveCenter.x - collarWidth / 2f, bodyTopY),
-            end = Offset(effectiveCenter.x + collarWidth / 2f, bodyTopY)
-        ),
-        topLeft = Offset(effectiveCenter.x - collarWidth / 2f, bodyTopY - collarHeight / 2f),
-        size = Size(collarWidth, collarHeight)
+    // Outer crisp dark rim outline
+    drawPath(
+        path = pinPath,
+        color = Color(0x66000000),
+        style = Stroke(width = 1.8f)
     )
 
-    // 6. SPHERICAL HEAD (Pawn Finial Ball with 3D Specular Highlight)
-    val headCenter = Offset(effectiveCenter.x, bodyTopY - headRadius * 0.85f)
-
-    // Head Sphere with 3D Radial Lighting
+    // 4. Inner Colored Circle Dome (The vibrant head of the goti)
+    val innerRadius = pinRadius * 0.65f
     drawCircle(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.9f),
-                token.color.color,
-                token.color.color.copy(alpha = 0.8f),
-                Color(0xFF140D1C)
-            ),
-            center = headCenter - Offset(headRadius * 0.32f, headRadius * 0.35f),
-            radius = headRadius * 1.1f
-        ),
-        radius = headRadius,
+        color = pieceColor,
+        radius = innerRadius,
         center = headCenter
     )
 
-    // Golden Halo rim on head
+    // Inner 3D specular highlight glint (gives shiny plastic/glass dome appearance)
     drawCircle(
-        color = GoldPrimary.copy(alpha = 0.85f),
-        radius = headRadius,
+        brush = Brush.radialGradient(
+            colors = listOf(Color.White.copy(alpha = 0.85f), Color.Transparent),
+            center = headCenter - Offset(innerRadius * 0.35f, innerRadius * 0.35f),
+            radius = innerRadius * 0.7f
+        ),
+        radius = innerRadius * 0.7f,
+        center = headCenter - Offset(innerRadius * 0.35f, innerRadius * 0.35f)
+    )
+
+    // Thin dark outline separating inner circle from silver rim
+    drawCircle(
+        color = Color.Black.copy(alpha = 0.25f),
+        radius = innerRadius,
         center = headCenter,
-        style = Stroke(width = 2.2f)
+        style = Stroke(width = 1.2f)
     )
-
-    // White specular reflection dot (glass glint)
-    drawCircle(
-        color = Color.White.copy(alpha = 0.9f),
-        radius = headRadius * 0.28f,
-        center = headCenter - Offset(headRadius * 0.35f, headRadius * 0.38f)
-    )
-
-    // 7. ROYAL CROWN FINIAL ON TOP OF HEAD
-    val crownY = headCenter.y - headRadius * 0.95f
-    val crownW = headRadius * 0.8f
-    val crownH = headRadius * 0.55f
-    val crownPath = Path().apply {
-        moveTo(headCenter.x - crownW / 2f, crownY + crownH * 0.5f)
-        lineTo(headCenter.x - crownW * 0.45f, crownY - crownH * 0.5f)
-        lineTo(headCenter.x - crownW * 0.15f, crownY)
-        lineTo(headCenter.x, crownY - crownH * 0.9f) // Middle Crown Spire
-        lineTo(headCenter.x + crownW * 0.15f, crownY)
-        lineTo(headCenter.x + crownW * 0.45f, crownY - crownH * 0.5f)
-        lineTo(headCenter.x + crownW / 2f, crownY + crownH * 0.5f)
-        close()
-    }
-    drawPath(path = crownPath, color = GoldPrimary)
 }

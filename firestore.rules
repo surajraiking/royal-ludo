@@ -54,8 +54,7 @@ service cloud.firestore {
     match /users/{userId} {
       // Any authenticated user can read public profiles for leaderboard / matches
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data);
-      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow create, update: if isOwner(userId);
       allow delete: if false;
 
       // Match History subcollection

@@ -217,14 +217,33 @@ fun GameScreen(
                 }
             }
 
-            // 2. PLAYER AVATARS ROW - GREEN AND YELLOW (TOP OPPONENTS WITH PLAYER SECTION 3D DICE)
+            // 2. TOP PLAYER AVATARS ROW - RED (TOP-LEFT) AND GREEN (TOP-RIGHT)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Player GREEN (Turn Index 1)
+                // Player RED (Top-Left Yard)
+                val redPlayer = viewModel.players.getOrNull(0)
+                if (redPlayer != null) {
+                    val isRedTurn = viewModel.currentTurnColor == PlayerColor.RED
+                    PlayerWidget(
+                        player = redPlayer,
+                        isActiveTurn = isRedTurn,
+                        color = PlayerColor.RED,
+                        score = viewModel.tokens.count { it.color == PlayerColor.RED && it.state == TokenState.GOAL },
+                        position = viewModel.getPlayerBoardPosition(PlayerColor.RED),
+                        diceValue = if (isRedTurn) viewModel.diceValue else 1,
+                        isRolling = isRedTurn && viewModel.rollingAnimActive,
+                        hasRolled = isRedTurn && viewModel.hasRolled,
+                        isHuman = redPlayer.type == PlayerType.LOCAL_HUMAN,
+                        onRollDice = { if (isRedTurn) viewModel.rollDice() },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Player GREEN (Top-Right Yard)
                 val greenPlayer = viewModel.players.getOrNull(1)
                 if (greenPlayer != null) {
                     val isGreenTurn = viewModel.currentTurnColor == PlayerColor.GREEN
@@ -239,25 +258,6 @@ fun GameScreen(
                         hasRolled = isGreenTurn && viewModel.hasRolled,
                         isHuman = greenPlayer.type == PlayerType.LOCAL_HUMAN,
                         onRollDice = { if (isGreenTurn) viewModel.rollDice() },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Player YELLOW (Turn Index 2)
-                val yellowPlayer = viewModel.players.getOrNull(2)
-                if (yellowPlayer != null) {
-                    val isYellowTurn = viewModel.currentTurnColor == PlayerColor.YELLOW
-                    PlayerWidget(
-                        player = yellowPlayer,
-                        isActiveTurn = isYellowTurn,
-                        color = PlayerColor.YELLOW,
-                        score = viewModel.tokens.count { it.color == PlayerColor.YELLOW && it.state == TokenState.GOAL },
-                        position = viewModel.getPlayerBoardPosition(PlayerColor.YELLOW),
-                        diceValue = if (isYellowTurn) viewModel.diceValue else 1,
-                        isRolling = isYellowTurn && viewModel.rollingAnimActive,
-                        hasRolled = isYellowTurn && viewModel.hasRolled,
-                        isHuman = yellowPlayer.type == PlayerType.LOCAL_HUMAN,
-                        onRollDice = { if (isYellowTurn) viewModel.rollDice() },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -335,33 +335,14 @@ fun GameScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 4. PLAYER AVATARS ROW - RED AND BLUE (BOTTOM PLAYERS WITH PLAYER SECTION 3D DICE)
+            // 4. BOTTOM PLAYER AVATARS ROW - BLUE (BOTTOM-LEFT) AND YELLOW (BOTTOM-RIGHT)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Player RED (Turn Index 0)
-                val redPlayer = viewModel.players.getOrNull(0)
-                if (redPlayer != null) {
-                    val isRedTurn = viewModel.currentTurnColor == PlayerColor.RED
-                    PlayerWidget(
-                        player = redPlayer,
-                        isActiveTurn = isRedTurn,
-                        color = PlayerColor.RED,
-                        score = viewModel.tokens.count { it.color == PlayerColor.RED && it.state == TokenState.GOAL },
-                        position = viewModel.getPlayerBoardPosition(PlayerColor.RED),
-                        diceValue = if (isRedTurn) viewModel.diceValue else 1,
-                        isRolling = isRedTurn && viewModel.rollingAnimActive,
-                        hasRolled = isRedTurn && viewModel.hasRolled,
-                        isHuman = redPlayer.type == PlayerType.LOCAL_HUMAN,
-                        onRollDice = { if (isRedTurn) viewModel.rollDice() },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Player BLUE (Turn Index 3)
+                // Player BLUE (Bottom-Left Yard)
                 val bluePlayer = viewModel.players.getOrNull(3)
                 if (bluePlayer != null) {
                     val isBlueTurn = viewModel.currentTurnColor == PlayerColor.BLUE
@@ -376,6 +357,25 @@ fun GameScreen(
                         hasRolled = isBlueTurn && viewModel.hasRolled,
                         isHuman = bluePlayer.type == PlayerType.LOCAL_HUMAN,
                         onRollDice = { if (isBlueTurn) viewModel.rollDice() },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Player YELLOW (Bottom-Right Yard)
+                val yellowPlayer = viewModel.players.getOrNull(2)
+                if (yellowPlayer != null) {
+                    val isYellowTurn = viewModel.currentTurnColor == PlayerColor.YELLOW
+                    PlayerWidget(
+                        player = yellowPlayer,
+                        isActiveTurn = isYellowTurn,
+                        color = PlayerColor.YELLOW,
+                        score = viewModel.tokens.count { it.color == PlayerColor.YELLOW && it.state == TokenState.GOAL },
+                        position = viewModel.getPlayerBoardPosition(PlayerColor.YELLOW),
+                        diceValue = if (isYellowTurn) viewModel.diceValue else 1,
+                        isRolling = isYellowTurn && viewModel.rollingAnimActive,
+                        hasRolled = isYellowTurn && viewModel.hasRolled,
+                        isHuman = yellowPlayer.type == PlayerType.LOCAL_HUMAN,
+                        onRollDice = { if (isYellowTurn) viewModel.rollDice() },
                         modifier = Modifier.weight(1f)
                     )
                 }

@@ -50,8 +50,13 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
+import com.google.firebase.FirebaseException
 import com.google.firebase.auth.auth
 import androidx.compose.ui.window.Dialog
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -184,7 +189,8 @@ fun signOutGoogle(
 
 enum class AuthTab(val title: String, val icon: String) {
     GOOGLE("Google Cloud", "👑"),
-    GAMER_ACCOUNT("Email / Gamer ID", "🎮"),
+    GAMER_ACCOUNT("Email / Pass", "✉️"),
+    PHONE("Phone SMS", "📱"),
     GUEST("Guest Play", "⚡")
 }
 
@@ -221,6 +227,14 @@ fun AuthScreen(
     var inputCustomClientId by remember { mutableStateOf(userPrefs.customWebClientId) }
     var showResendVerificationButton by remember { mutableStateOf(false) }
     var isResendingVerification by remember { mutableStateOf(false) }
+
+    // Phone SMS Auth state
+    var phoneNumber by remember { mutableStateOf("") }
+    var verificationId by remember { mutableStateOf<String?>(null) }
+    var smsOtpCode by remember { mutableStateOf("") }
+    var isSmsOtpSent by remember { mutableStateOf(false) }
+    var isSendingOtp by remember { mutableStateOf(false) }
+    var isVerifyingOtp by remember { mutableStateOf(false) }
 
     // Guest Play state
     var guestName by remember { mutableStateOf("Warrior #${(100..999).random()}") }
@@ -822,6 +836,194 @@ fun AuthScreen(
                                 } else {
                                     Text("✉️ Resend Verification Email Link", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
+                            }
+                        }
+                    }
+
+                    AuthTab.PHONE -> {
+                        Text(
+                            text = "Log in instantly using your mobile number and one-time SMS verification code.",
+                            color = TextWhite.copy(alpha = 0.85f),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        if (!isSmsOtpSent) {
+                            OutlinedTextField(
+                                value = phoneNumber,
+                                onValueChange = { phoneNumber = it },
+                                label = { Text("Phone Number (+91...)", fontSize = 12.sp) },
+                                placeholder = { Text("+91 9876543210", color = TextGray) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = GlassCardBorder,
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedLabelColor = NeonCyan,
+                                    unfocusedLabelColor = TextGray
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Button(
+                                onClick = {
+                                    val phone = phoneNumber.trim()
+                                    if (phone.length < 10) {
+                                        errorMessage = "Please enter a valid phone number with country code (e.g. +919876543210)"
+                                        return@Button
+                                    }
+                                    isSendingOtp = true
+                                    errorMessage = null
+                                    successMessage = null
+
+                                    try {
+                                        val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                                            override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                                                coroutineScope.launch {
+                                                    try {
+                                                        val authResult = Firebase.auth.signInWithCredential(credential).await()
+                                                        val user = authResult.user
+                                                        if (user != null) {
+                                                            val repo = LudoFirebaseRepository(context)
+                                                            repo.saveOrInitUserProfile(
+                                                                username = user.phoneNumber ?: "Warrior",
+                                                                avatarId = selectedAvatar
+                                                            )
+                                                            successMessage = "Phone verified successfully!"
+                                                            onAuthSuccess()
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        errorMessage = e.localizedMessage ?: "Auto verification failed"
+                                                    } finally {
+                                                        isSendingOtp = false
+                                                    }
+                                                }
+                                            }
+
+                                            override fun onVerificationFailed(e: FirebaseException) {
+                                                isSendingOtp = false
+                                                errorMessage = e.localizedMessage ?: "Phone verification failed. Check phone format."
+                                            }
+
+                                            override fun onCodeSent(verId: String, token: PhoneAuthProvider.ForceResendingToken) {
+                                                isSendingOtp = false
+                                                verificationId = verId
+                                                isSmsOtpSent = true
+                                                successMessage = "6-digit OTP code sent via SMS! Please enter below."
+                                            }
+                                        }
+
+                                        val options = PhoneAuthOptions.newBuilder(Firebase.auth)
+                                            .setPhoneNumber(phone)
+                                            .setTimeout(60L, TimeUnit.SECONDS)
+                                            .setActivity(context as Activity)
+                                            .setCallbacks(callbacks)
+                                            .build()
+                                        PhoneAuthProvider.verifyPhoneNumber(options)
+                                    } catch (e: Exception) {
+                                        isSendingOtp = false
+                                        errorMessage = e.localizedMessage ?: "Failed to send SMS code"
+                                    }
+                                },
+                                enabled = !isSendingOtp && phoneNumber.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary)
+                            ) {
+                                if (isSendingOtp) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = DeepDarkBg, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Sending SMS OTP...", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                } else {
+                                    Text("SEND 6-DIGIT OTP VIA SMS 📲", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "Enter 6-digit code sent to $phoneNumber:",
+                                color = NeonCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedTextField(
+                                value = smsOtpCode,
+                                onValueChange = { if (it.length <= 6) smsOtpCode = it },
+                                label = { Text("6-Digit OTP Code", fontSize = 12.sp) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = GlassCardBorder,
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedLabelColor = NeonCyan,
+                                    unfocusedLabelColor = TextGray
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Button(
+                                onClick = {
+                                    val code = smsOtpCode.trim()
+                                    val verId = verificationId
+                                    if (code.length != 6 || verId == null) {
+                                        errorMessage = "Please enter the 6-digit OTP code."
+                                        return@Button
+                                    }
+                                    isVerifyingOtp = true
+                                    errorMessage = null
+                                    coroutineScope.launch {
+                                        try {
+                                            val credential = PhoneAuthProvider.getCredential(verId, code)
+                                            val authResult = Firebase.auth.signInWithCredential(credential).await()
+                                            val user = authResult.user
+                                            if (user != null) {
+                                                val repo = LudoFirebaseRepository(context)
+                                                repo.saveOrInitUserProfile(
+                                                    username = user.phoneNumber ?: "Warrior",
+                                                    avatarId = selectedAvatar
+                                                )
+                                                successMessage = "Phone verified successfully! Welcome."
+                                                onAuthSuccess()
+                                            }
+                                        } catch (e: Exception) {
+                                            errorMessage = e.localizedMessage ?: "Invalid OTP code. Please try again."
+                                        } finally {
+                                            isVerifyingOtp = false
+                                        }
+                                    }
+                                },
+                                enabled = !isVerifyingOtp && smsOtpCode.length == 6,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                            ) {
+                                if (isVerifyingOtp) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = DeepDarkBg, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Verifying OTP...", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                } else {
+                                    Text("VERIFY OTP & LOG IN 🚀", color = DeepDarkBg, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            TextButton(
+                                onClick = {
+                                    isSmsOtpSent = false
+                                    smsOtpCode = ""
+                                }
+                            ) {
+                                Text("Change Phone Number", color = TextGray, fontSize = 11.sp)
                             }
                         }
                     }

@@ -17,6 +17,8 @@ import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.LudoViewModel
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 
@@ -26,6 +28,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                val options = FirebaseOptions.Builder()
+                    .setApiKey("AIzaSyC3WdHqJOnVtgBh5KMS5aWulSqpOplQatk")
+                    .setApplicationId("1:1008445954517:android:52df9fd5d570f30fe8f476")
+                    .setProjectId("myludoapp-97629")
+                    .setStorageBucket("myludoapp-97629.firebasestorage.app")
+                    .setGcmSenderId("1008445954517")
+                    .build()
+                FirebaseApp.initializeApp(this, options)
+            }
+        } catch (e: Exception) {
+            // Initialized automatically via google-services.json
+        }
+
         setContent {
             MyApplicationTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
