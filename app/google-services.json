@@ -13,15 +13,33 @@
           "package_name": "com.surajrai.raikingludo"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1008445954517-6orjtk84sarlskodcqc9t0mg61vno1mr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.surajrai.raikingludo",
+            "certificate_hash": "a6ecff93ac3e77ec0653c11da44c2014b553f3ef"
+          }
+        },
+        {
+          "client_id": "1008445954517-p66uei1ihg0fc89a6h2job4ju3atft68.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "BUILD_ONLY_PLACEHOLDER"
+          "current_key": "AIzaSyBrpWUFRmEdzjnOJwkSB4DUewxwkyJ1upw"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1008445954517-p66uei1ihg0fc89a6h2job4ju3atft68.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
