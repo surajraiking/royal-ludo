@@ -32,8 +32,8 @@ class MainActivity : ComponentActivity() {
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
                 val options = FirebaseOptions.Builder()
-                    .setApiKey("AIzaSyC3WdHqJOnVtgBh5KMS5aWulSqpOplQatk")
-                    .setApplicationId("1:1008445954517:android:52df9fd5d570f30fe8f476")
+                    .setApiKey("AIzaSyBrpWUFRmEdzjnOJwkSB4DUewxwkyJ1upw")
+                    .setApplicationId("1:1008445954517:android:466b672b1473e11dbc055c")
                     .setProjectId("myludoapp-97629")
                     .setStorageBucket("myludoapp-97629.firebasestorage.app")
                     .setGcmSenderId("1008445954517")

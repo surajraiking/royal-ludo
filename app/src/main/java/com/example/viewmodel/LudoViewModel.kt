@@ -413,6 +413,18 @@ class LudoViewModel(application: Application) : AndroidViewModel(application) {
         return earned
     }
 
+    fun addFreeCoins(earned: Int) {
+        prefs.earnCoins(earned)
+        userCoins = prefs.coins
+        viewModelScope.launch {
+            try {
+                if (Firebase.auth.currentUser != null) {
+                    firebaseRepo.updateCurrency(coinsDelta = earned, gemsDelta = 0)
+                }
+            } catch (e: Exception) { }
+        }
+    }
+
     fun rollDailyRewardGems(): Int {
         val earned = listOf(5, 10, 15, 20).random()
         prefs.earnGems(earned)

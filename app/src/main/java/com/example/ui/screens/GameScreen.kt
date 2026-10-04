@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -1294,27 +1295,95 @@ fun PlayerWidget(
 }
 
 /**
- * Authentic Classic Ludo King 3D Dice View with crisp rounded cube, colored border, and authentic pips
+ * Authentic Classic Ludo King 3D Dice View with physics-based tumble, bounce, and specular pips
  */
 @Composable
 fun ClassicLudoDiceView(
     value: Int,
     color: Color,
     isRolling: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    skinName: String = "Neon Gold"
 ) {
+    var faceValue by remember(value) { mutableIntStateOf(value.coerceIn(1, 6)) }
+    val rotationX = remember { Animatable(0f) }
+    val rotationY = remember { Animatable(0f) }
+    val rotationZ = remember { Animatable(0f) }
+    val bounceY = remember { Animatable(0f) }
+    val squashX = remember { Animatable(1f) }
+    val squashY = remember { Animatable(1f) }
+
+    LaunchedEffect(isRolling) {
+        if (isRolling) {
+            launch {
+                rotationX.animateTo(720f + listOf(-30f, 0f, 30f).random(), tween(700, easing = FastOutSlowInEasing))
+                rotationX.snapTo(0f)
+            }
+            launch {
+                rotationY.animateTo(720f + listOf(-45f, 0f, 45f).random(), tween(700, easing = FastOutSlowInEasing))
+                rotationY.snapTo(0f)
+            }
+            launch {
+                rotationZ.animateTo(360f, tween(700, easing = FastOutSlowInEasing))
+                rotationZ.snapTo(0f)
+            }
+            launch {
+                bounceY.animateTo(-24f, tween(160, easing = FastOutLinearInEasing))
+                bounceY.animateTo(0f, tween(150, easing = LinearOutSlowInEasing))
+                squashY.snapTo(0.84f)
+                squashX.snapTo(1.16f)
+                delay(30)
+                squashY.animateTo(1f, tween(80))
+                squashX.animateTo(1f, tween(80))
+                bounceY.animateTo(-10f, tween(100, easing = FastOutLinearInEasing))
+                bounceY.animateTo(0f, tween(90, easing = LinearOutSlowInEasing))
+            }
+            val intervals = listOf(40L, 50L, 70L, 100L, 140L, 190L)
+            for (iv in intervals) {
+                faceValue = (1..6).filter { it != faceValue }.random()
+                delay(iv)
+            }
+            faceValue = value
+        } else {
+            faceValue = value
+        }
+    }
+
     Box(
         modifier = modifier
-            .size(44.dp)
-            .shadow(4.dp, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color.White)
-            .border(2.dp, color, RoundedCornerShape(10.dp)),
+            .offset(y = bounceY.value.dp)
+            .graphicsLayer {
+                this.rotationX = rotationX.value
+                this.rotationY = rotationY.value
+                this.rotationZ = rotationZ.value
+                this.scaleX = squashX.value
+                this.scaleY = squashY.value
+                this.cameraDistance = 32f
+            }
+            .size(46.dp)
+            .shadow(if (isRolling) 8.dp else 4.dp, RoundedCornerShape(11.dp))
+            .clip(RoundedCornerShape(11.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color.White, Color(0xFFF0F0F5))
+                )
+            )
+            .border(2.dp, color, RoundedCornerShape(11.dp)),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize().padding(5.dp)) {
+            // Specular reflection gradient
+            drawRoundRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.45f), Color.Transparent),
+                    center = Offset(size.width * 0.25f, size.height * 0.25f),
+                    radius = size.width * 0.55f
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f)
+            )
+
             val pipRadius = size.width * 0.11f
-            val pipColor = if (value == 6) Color(0xFFE52521) else Color(0xFF1E1E1E)
+            val pipColor = if (faceValue == 6) Color(0xFFE52521) else Color(0xFF1E1E1E)
 
             val leftX = size.width * 0.23f
             val midX = size.width * 0.5f
@@ -1324,7 +1393,7 @@ fun ClassicLudoDiceView(
             val midY = size.height * 0.5f
             val bottomY = size.height * 0.77f
 
-            val pips = when (if (isRolling) (1..6).random() else value) {
+            val pips = when (faceValue) {
                 1 -> listOf(Offset(midX, midY))
                 2 -> listOf(Offset(leftX, topY), Offset(rightX, bottomY))
                 3 -> listOf(Offset(leftX, topY), Offset(midX, midY), Offset(rightX, bottomY))
@@ -1339,15 +1408,23 @@ fun ClassicLudoDiceView(
             }
 
             pips.forEach { pipOffset ->
+                // Drop shadow for recessed pip look
+                drawCircle(
+                    color = Color.Black.copy(alpha = 0.25f),
+                    radius = pipRadius * 1.05f,
+                    center = pipOffset + Offset(1f, 1f)
+                )
+                // Pip body
                 drawCircle(
                     color = pipColor,
                     radius = pipRadius,
                     center = pipOffset
                 )
+                // Specular gloss dot on pip
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.35f),
+                    color = Color.White.copy(alpha = 0.5f),
                     radius = pipRadius * 0.35f,
-                    center = pipOffset - Offset(pipRadius * 0.2f, pipRadius * 0.2f)
+                    center = pipOffset - Offset(pipRadius * 0.25f, pipRadius * 0.25f)
                 )
             }
         }

@@ -19,3 +19,11 @@ val LudoBlueVibrant = Color(0xFF00A8FF)
 val TextWhite = Color(0xFFFFFFFF)
 val TextGray = Color(0xFFA0A5B5)
 
+// Royal Casino Theme Colors for Authentic Ludo King Style
+val RoyalBlueDark = Color(0xFF061833)
+val RoyalBlueVibrant = Color(0xFF0D3B7A)
+val RoyalBlueSurface = Color(0xFF0F4C9B)
+val GoldAccentLight = Color(0xFFFFF176)
+val GoldAccentDark = Color(0xFFD48800)
+val RoyalGoldenYellow = Color(0xFFFFC107)
+

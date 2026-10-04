@@ -27,6 +27,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.model.*
 import com.example.ui.theme.*
 import com.example.viewmodel.LudoViewModel
+import com.example.ui.components.PhysicsDiceShowcaseCard
 import androidx.credentials.CredentialManager
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
@@ -590,7 +591,19 @@ fun LobbyScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 4B. INTERACTIVE PHYSICS ROLLING DICE SHOWCASE
+            PhysicsDiceShowcaseCard(
+                modifier = Modifier.padding(bottom = 12.dp),
+                onRollResult = { rolledValue ->
+                    if (rolledValue == 6) {
+                        viewModel.addFreeCoins(50)
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // 5. BUTTON HIGHLIGHTS (Leaderboard, Spin Wheel, Store)
             Row(
