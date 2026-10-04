@@ -1,6 +1,7 @@
 name: Build APK and AAB (Android)
 # Build trigger verified 2026-10-02
 # CI retrigger for current repository state
+# Latest APK/AAB build requested 2026-10-04
 
 on:
   push:
